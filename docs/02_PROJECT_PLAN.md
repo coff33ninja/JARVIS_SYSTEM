@@ -30,7 +30,7 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [x] Two-hand detection + spread gesture: toggles Control ↔ Transfer mode
 - [x] Open palm actions: catch (Transfer), release (Chat)
 - [x] Presentation mode (F3): point = laser cursor, V-sign/swipe = PageUp/PageDown slides
-- [x] Chat mode wiring (voice trigger) + calibration UI
+- [x] Chat mode wiring (voice trigger) + calibration UI — voice→mode router (`app/control/mode_voice.py`) wired into `VoiceLoop.on_command`; end-to-end Idle→wake→Control→voice("chat mode")→Chat→voice→Control flow verified in `tests/test_chat_wiring.py`
 - [x] **Exit criterion (latency):** < 80 ms gesture→action latency — measured by `scripts/bench_latency.py` (`uv run python scripts/bench_latency.py --paced`); ~67 ms estimated / ~63 ms paced at defaults, leaving ~13 ms headroom; `tests/test_latency.py` guards it in CI
 - [ ] **Exit criterion (reliability):** zero misfires in a 10-minute session
 

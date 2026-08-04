@@ -39,7 +39,7 @@ Natural-language, not rigid. The agent maps these to tools:
 - "Volume up/down, mute" → media tool
 - "Throw this to the tablet" → transfer tool (Phase 4)
 - "What am I pointing at?" → screen+vision tool (Phase 5)
-- "Switch to <mode>" → mode machine
+- "Switch to <mode>" → mode machine (`app/control/mode_voice.py` wired via `VoiceLoop.on_command`: "chat mode", "control mode", "idle", "transfer mode", "presentation mode"; agent skipped, confirmation spoken)
 
 ## Voice config
 

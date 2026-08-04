@@ -33,7 +33,7 @@ Reference spec for gesture → action mapping. Hand landmarks use MediaPipe's 21
 | Transfer | Grab, Throw, Catch, Open Palm | Cross-device file movement |
 | Presentation | Point, swipe, V-sign | Slides/scroll/navigation |
 
-Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice command ("Jarvis, transfer mode"), or hotkey override.
+Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice command, or hotkey override. Voice commands route through `app/control/mode_voice.py` (wired into `VoiceLoop.on_command`): "Jarvis, chat mode" toggles Chat, "control mode" / "go idle" return to Control/Idle, "transfer mode" and "presentation mode" switch the others — shortest-path routed through the mode table, with the agent skipped for pure mode switches and a confirmation phrase spoken.
 
 ## Implemented Hotkeys
 

@@ -13,6 +13,7 @@ import os
 import threading
 import time
 from dataclasses import dataclass
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +34,18 @@ class VoiceConfig:
 
 
 class VoiceLoop:
-    def __init__(self, agent, stt, tts, mic=None, config: VoiceConfig | None = None):
+    def __init__(self, agent, stt, tts, mic=None, config: VoiceConfig | None = None,
+                 on_command: Optional[Callable[[str], Optional[str]]] = None):
         self.agent = agent
         self.stt = stt
         self.tts = tts
         self.mic = mic
         self.config = config or VoiceConfig()
+        # Optional mode-switch hook: given the wake-stripped command, return a
+        # reply to speak (command handled, agent skipped) or None (not a mode
+        # command -> the normal agent turn runs). Wired by the app to the mode
+        # machine via app/control/mode_voice.py.
+        self.on_command = on_command
         if self.mic is None:
             from .audio import MicInput
 
@@ -78,6 +85,20 @@ class VoiceLoop:
             command = raw
         if not command:
             return None
+
+        # Mode-switch commands ("chat mode", "transfer mode", ...) short-circuit
+        # the agent: the on_command hook switches the mode machine and returns
+        # a confirmation phrase for the TTS.
+        if self.on_command is not None:
+            reply = self.on_command(command)
+            if reply is not None:
+                self.tts.say(reply)
+                return {
+                    "command": command,
+                    "reply": reply,
+                    "transcript": self.agent.transcript(),
+                    "mode_change": True,
+                }
 
         reply = self.agent.handle_turn(command)
         self.tts.say(reply)

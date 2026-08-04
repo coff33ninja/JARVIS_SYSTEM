@@ -128,3 +128,35 @@ def test_wake_mode_off_acts_on_any_speech(store):
     result = loop.run_once()
     assert result["command"] == "what time is it"
     assert len(agent.llm.calls) == 1
+
+
+# --------------------------------------------------------------------- #
+# on_command mode-switch hook
+# --------------------------------------------------------------------- #
+
+def _command_hook(command):
+    if "chat" in command.lower():
+        return "Chat mode."
+    return None
+
+
+def test_mode_command_short_circuits_agent(store):
+    loop, agent = make_loop(store, LOUD, ["jarvis chat mode"])
+    loop.on_command = _command_hook
+    result = loop.run_once()
+    assert result["command"] == "chat mode"
+    assert result["mode_change"] is True
+    assert result["reply"] == "Chat mode."
+    assert agent.llm.calls == []  # mode switch never hit the LLM
+    assert loop.tts.said == ["Chat mode."]
+
+
+def test_non_mode_command_still_runs_agent(store):
+    loop, agent = make_loop(store, LOUD, ["jarvis open settings"],
+                            llm_responses=[_plain("done")])
+    loop.on_command = _command_hook
+    result = loop.run_once()
+    assert result["command"] == "open settings"
+    assert "mode_change" not in result
+    assert len(agent.llm.calls) == 1
+    assert loop.tts.said == ["done"]
