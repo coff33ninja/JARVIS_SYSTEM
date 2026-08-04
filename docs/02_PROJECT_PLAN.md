@@ -6,11 +6,11 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 
 **Goal:** A working proof-of-life: webcam hand tracking → virtual mouse → minimal transparent overlay.
 
-- [ ] Install MediaPipe Tasks (`uv add mediapipe`), verify webcam Hand Landmarker pipeline
-- [ ] Index-finger cursor control (finger tip → screen coordinates) with 1-Euro smoothing
-- [ ] Pinch = click (left click); two-finger pinch = right click
-- [ ] Fist = drag; index + middle extended = scroll
-- [ ] Simple transparent overlay window showing hand skeleton + reticle
+- [x] Install MediaPipe Tasks (`uv add mediapipe`), verify webcam Hand Landmarker pipeline
+- [x] Index-finger cursor control (finger tip → screen coordinates) with 1-Euro smoothing
+- [x] Pinch = click (left click); two-finger pinch = right click
+- [x] Fist = drag; index + middle extended = scroll
+- [x] Simple transparent overlay window showing hand skeleton + reticle
 - [ ] **Exit criteria:** reliably move cursor and click for 5+ minutes without tracking loss
 
 **Head start:** `ArdaGral06/hand-gesture-pc-control`, `songs66/AirGestureMouse`, `Sid-V5/GestureHud`.

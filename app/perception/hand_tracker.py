@@ -160,7 +160,8 @@ class HandLandmarkerTracker:
         hands: list[list[tuple[float, float, float]]] = []
         for lmks in result.hand_landmarks or []:
             hands.append([(lm.x, lm.y, lm.z) for lm in lmks])
-        handedness = [c.category_name for c in (result.handedness or [])]
+        handedness = [c.category_name
+                      for hand in (result.handedness or []) for c in hand]
         return HandTrackingResult(hands=hands or None, handedness=handedness)
 
     def close(self) -> None:

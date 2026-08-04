@@ -12,6 +12,8 @@ Every model, binary, and data asset the system needs. Store under `models/`. All
 | Face Landmarker (`.task`) | optional gaze.py | ~10 MB | https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker |
 
 > Model files come from the official model bundle zips linked on each solution page. Add checksums after first download (record sha256 in this table).
+>
+> Downloaded: `models/hand_landmarker.task` — 7.5 MB, sha256 `FBC2A30080C3C557093B5DDFC334698132EB341044CCEE322CCF8BCF3607CDE1` (auto-downloaded by `app/perception/hand_tracker.py`, gitignored).
 
 ## Voice
 

@@ -86,6 +86,39 @@ def test_tracker_with_existing_model_builds():
     t.close()
 
 
+def test_tracker_parses_real_result_shape():
+    """MediaPipe returns per-hand lists: hand_landmarks=[hand...], handedness=[[Category]]."""
+    import numpy as np
+    from unittest.mock import Mock, patch
+
+    t = HandLandmarkerTracker(model_path="fake.task", auto_download=False)
+    landmarker = Mock()
+
+    def _lm(x, y, z):
+        m = Mock()
+        m.x, m.y, m.z = x, y, z
+        return m
+
+    class _Cat:
+        category_name = "Right"
+
+    result = Mock()
+    result.hand_landmarks = [[_lm(0.1, 0.2, 0.3)] * 21]
+    result.handedness = [[_Cat()]]
+    landmarker.detect_for_video.return_value = result
+    with patch("pathlib.Path.exists", return_value=True), \
+            patch("mediapipe.tasks.python.BaseOptions"), \
+            patch("mediapipe.tasks.python.vision.HandLandmarkerOptions"), \
+            patch("mediapipe.tasks.python.vision.HandLandmarker"
+                  ".create_from_options", return_value=landmarker):
+        assert t.available is True
+        res = t.process(np.zeros((10, 10, 3), dtype=np.uint8))
+    assert res.detected is True
+    assert len(res.hands) == 1 and res.hands[0][0] == (0.1, 0.2, 0.3)
+    assert res.handedness == ["Right"]
+    t.close()
+
+
 def test_ensure_model_downloads_when_missing(tmp_path, monkeypatch):
     dest = tmp_path / "hand_landmarker.task"
     t = HandLandmarkerTracker(model_path=dest, auto_download=True)

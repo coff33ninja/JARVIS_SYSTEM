@@ -60,9 +60,14 @@ This project was scaffolded from a research conversation originally produced in 
 - **Highly configurable** — gestures, sensitivity, monitor layout
 - **Cinematic but useful** — holographic feel without sacrificing daily usability
 
-## Recommended Starting Point
+## Getting Started
 
-Phase 1 (see plan): MediaPipe hands + basic virtual mouse + simple transparent overlay. Two existing repos give a head start:
+Phase 1 (hand tracking → virtual mouse → overlay) is implemented. Set up per `docs/07_SETUP.md`, then:
 
-- `ArdaGral06/hand-gesture-pc-control` — cursor, click, scroll, drag, virtual keyboard
-- `quiet-node/gesture-lab` — Iron Man aesthetic holographic environment
+```sh
+uv run python scripts/smoke_test_hands.py     # verify webcam + MediaPipe hand tracking
+uv run python scripts/jarvis_control.py       # run the Phase 1 control loop (--no-hud to disable overlay)
+uv run pytest -q                               # 198 tests
+```
+
+Phase 2+ (see `docs/02_PROJECT_PLAN.md`): full gesture set, multi-monitor mapping, mode system.
