@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.agent.recall.config import RecallConfig
 from app.agent.recall.retriever import Recaller
-from app.agent.recall.store import Fact, MemoryStore
+from app.agent.recall.store import Episode, Fact, MemoryStore
 
 
 class FlakyEmbedder:
@@ -38,18 +38,20 @@ def test_keyword_only_when_no_embedder(store, fake_embedder):
 
 
 def test_semantic_only_when_no_keyword_hit(store, fake_embedder):
-    store.add_fact(Fact("The hand wave starts a gesture", tags=("vocab",)))
+    store.add_fact(Fact("Transfer data to the tablet"))
     recaller = Recaller(store, embedder=fake_embedder)
-    hits = recaller.remember("hand gesture")
+    assert recaller.index() == 1  # embed rows so semantic recall has vectors
+    hits = recaller.remember("how do I send a file")
     assert hits
     assert hits[0].source == "semantic"
-    assert "gesture" in hits[0].content
+    assert "tablet" in hits[0].content
 
 
 def test_hybrid_ranks_relevant_higher(store, fake_embedder):
     store.add_fact(Fact("Jarvis recognises a voice command", tags=("voice",)))
     store.add_fact(Fact("The reticle follows the cursor"))
     recaller = Recaller(store, embedder=fake_embedder)
+    assert recaller.index() == 2
     hits = recaller.remember("voice command jarvis")
     assert hits
     assert "voice command" in hits[0].content
@@ -59,8 +61,8 @@ def test_hybrid_ranks_relevant_higher(store, fake_embedder):
 def test_degrades_to_keyword_when_embedder_dies(store, fake_embedder):
     store.add_fact(Fact("Transfer a file with a throw gesture", tags=("file",)))
     recaller = Recaller(store, embedder=FlakyEmbedder(fake_embedder, fail_after=1))
-    # query embedding fails; keyword recall must still return the fact
-    hits = recaller.remember("throw file")
+    assert recaller.index() == 1  # consumes the one working embed call
+    hits = recaller.remember("throw file")  # query embed now fails -> fallback
     assert hits
     assert "throw gesture" in hits[0].content
     assert hits[0].source == "keyword"
@@ -76,12 +78,11 @@ def test_remember_uses_top_k_and_floor(store, fake_embedder):
 
 
 def test_recall_history_is_chronological(store):
-    store.add_fact(Fact("unrelated"))
-    for role, content in (("user", "first"), ("assistant", "second")):
-        store.add_fact(Fact(f"{role} {content}"))
+    store.add_episode(Episode("user", "first", session_id="s"))
+    store.add_episode(Episode("assistant", "second", session_id="s"))
     recaller = Recaller(store)
-    history = recaller.recall_history(limit=5)
-    assert history  # episodes only; facts are excluded
+    history = recaller.recall_history(session_id="s")
+    assert [e["role"] for e in history] == ["user", "assistant"]
 
 
 def test_index_backfills_embeddings(store, fake_embedder):

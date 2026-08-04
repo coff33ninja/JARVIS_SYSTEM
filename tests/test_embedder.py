@@ -27,11 +27,12 @@ class FakeOpenAIClient:
     def __init__(self, vectors, models_ok=True):
         self.embeddings = FakeEmbeddings(vectors)
         self.models_ok = models_ok
+        self.models = SimpleNamespace(list=self._list_models)
 
-    def models(self):
+    def _list_models(self):
         if not self.models_ok:
             raise RuntimeError("connection refused")
-        return SimpleNamespace(list=lambda: [SimpleNamespace(id="fake")])
+        return [SimpleNamespace(id="fake")]
 
 
 @pytest.fixture

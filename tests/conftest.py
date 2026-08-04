@@ -15,12 +15,24 @@ def store(tmp_path):
         yield ms
 
 
-class FakeEmbedder:
-    """Duck-typed embedder: bag-of-words vectors, no network."""
+CONCEPT_SYNONYMS = {
+    "file": ("file", "transfer", "throw", "catch", "send", "tablet"),
+    "gesture": ("gesture", "hand", "wave", "flick", "cursor"),
+    "voice": ("voice", "speak", "speech", "audio", "command"),
+    "jarvis": ("jarvis", "assistant", "agent"),
+}
 
-    def __init__(self, vocab: tuple[str, ...] = ("jarvis", "gesture", "voice", "file")):
-        self.vocab = vocab
+
+class FakeEmbedder:
+    """Duck-typed embedder: concept bag-of-words vectors, no network.
+
+    Synonyms decouple semantic similarity from literal keyword overlap so
+    tests can exercise semantic-only and hybrid paths.
+    """
+
+    def __init__(self):
         self.config = EmbedderConfig(enabled=True, model="fake-embed")
+        self.vocab = tuple(CONCEPT_SYNONYMS)
 
     @property
     def available(self) -> bool:
@@ -35,8 +47,8 @@ class FakeEmbedder:
     def _vector(self, text: str) -> list[float]:
         text = text.lower()
         vec = np.zeros(len(self.vocab), dtype=np.float32)
-        for i, word in enumerate(self.vocab):
-            if word in text:
+        for i, concept in enumerate(self.vocab):
+            if any(syn in text for syn in CONCEPT_SYNONYMS[concept]):
                 vec[i] = 1.0
         return vec.tolist()
 
