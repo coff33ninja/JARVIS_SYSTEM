@@ -1,0 +1,37 @@
+[project]
+name = "jarvis-system"
+version = "0.1.0"
+description = "Local-first Iron Man/JARVIS-style gesture + LLM computer control system (MediaPipe + HUD + agent + throw/catch transfer)"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    # Vision / ML
+    "mediapipe>=0.10.14",
+    "opencv-python>=4.8",
+    "numpy>=1.24",
+    # Desktop control
+    "pyautogui>=0.9.54",
+    "pynput>=1.7.6",
+    "pywin32>=306; platform_system == 'Windows'",
+    # HUD / networking
+    "websockets>=12.0",
+    "requests>=2.31",
+    "PyYAML>=6.0",
+    # Voice / agent (Phase 3)
+    "faster-whisper>=1.0",
+    "openai>=1.30",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv]
+# This is an application, not a distributable package.
+package = false
+# Use a uv-managed Python (bypasses system Python restrictions/versions).
+managed = true
+python-preference = "managed"
+# Keep the cache off the system drive (C:) — bypass system cache restrictions.
+cache-dir = "D:/uv-cache"

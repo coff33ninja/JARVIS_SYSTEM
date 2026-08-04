@@ -1,0 +1,26 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+# uv.lock is COMMITTED (do not ignore); .uv-* dirs only if using project-local cache
+
+# Models & assets (never commit binaries)
+models/
+
+# Config / profiles (user-specific)
+config/*.local.json
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
