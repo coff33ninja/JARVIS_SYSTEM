@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cv2
 
 from app.config import AppConfig
-from app.control.virtual_keyboard import VirtualKeyboard
+from app.control.virtual_keyboard import MediaController, VirtualKeyboard
 from app.control.virtual_mouse import VirtualMouse
 from app.hud.hud_server import HUDConfig, HUDServer
 from app.perception.camera import Camera
@@ -62,14 +62,18 @@ def main(argv: list[str] | None = None) -> int:
 
     pipeline = build_pipeline(args, cfg)
     keyboard = VirtualKeyboard()
+    media = MediaController()
     stop = _StopKey(
         on_mode_toggle=lambda: pipeline.modes.transition("hotkey"),
         on_keyboard_toggle=keyboard.toggle_osk,
+        on_media=lambda name: media.action(name),
     )
     logger.info("JARVIS Phase 1 running (ESC/q to quit). "
                 "Pinch = click, two-finger pinch = right click, "
                 "fist = drag, V-sign = scroll, swipe = next/prev window. "
-                "F2 = idle/control toggle, F4 = on-screen keyboard.")
+                "F2 = idle/control toggle, F4 = on-screen keyboard. "
+                "F5/F6/F7 = play-pause/next/previous, F8 mute, "
+                "F9/F10 = volume down/up.")
     try:
         _loop(pipeline, stop)
     except KeyboardInterrupt:
@@ -95,14 +99,16 @@ def _loop(pipeline: ControlPipeline, stop: "_StopKey") -> None:
 
 
 class _StopKey:
-    """Background key listener: ESC/q quit, F2 mode toggle, F4 OSK."""
+    """Background key listener: ESC/q quit, F2 mode toggle, F4 OSK, F5-F10 media."""
 
-    def __init__(self, on_mode_toggle=None, on_keyboard_toggle=None):
+    def __init__(self, on_mode_toggle=None, on_keyboard_toggle=None,
+                 on_media=None):
         import threading
 
         self._event = threading.Event()
         self._on_mode_toggle = on_mode_toggle
         self._on_keyboard_toggle = on_keyboard_toggle
+        self._on_media = on_media or (lambda _name: None)
         try:
             from pynput import keyboard
 
@@ -123,6 +129,17 @@ class _StopKey:
             self._on_mode_toggle()
         elif name == "Key.f4" and self._on_keyboard_toggle:
             self._on_keyboard_toggle()
+        else:
+            media = {
+                "Key.f5": "play_pause",
+                "Key.f6": "next",
+                "Key.f7": "previous",
+                "Key.f8": "volume_mute",
+                "Key.f9": "volume_down",
+                "Key.f10": "volume_up",
+            }.get(name)
+            if media:
+                self._on_media(media)
 
     @property
     def triggered(self) -> bool:

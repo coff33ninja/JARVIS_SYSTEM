@@ -29,10 +29,12 @@ class ReticleEvent:
 
     x: float
     y: float
+    monitor: int = 0  # index of the monitor the point lands on (-1 = none)
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "reticle", "x": self.x, "y": self.y, "ts": self.ts}
+        return {"type": "reticle", "x": self.x, "y": self.y,
+                "monitor": self.monitor, "ts": self.ts}
 
 
 @dataclass
@@ -49,6 +51,17 @@ class StatusEvent:
                 "detected": self.detected, "ts": self.ts}
 
 
-def encode(event: SkeletonEvent | ReticleEvent | StatusEvent) -> dict[str, Any]:
+@dataclass
+class MonitorsEvent:
+    """Per-monitor layout (logical coords) for the overlay to draw zones."""
+
+    monitors: list[tuple[int, int, int, int]] = field(default_factory=list)
+    ts: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "monitors", "monitors": self.monitors, "ts": self.ts}
+
+
+def encode(event: SkeletonEvent | ReticleEvent | StatusEvent | MonitorsEvent) -> dict[str, Any]:
     """Normalise any HUD event to its wire dict (mirrors asdict for safety)."""
     return event.to_dict()

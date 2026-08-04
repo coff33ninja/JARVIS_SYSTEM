@@ -1,9 +1,12 @@
-"""On-screen keyboard + text-input primitives.
+"""On-screen keyboard + text-input + media primitives.
 
-Typing is injected through PyAutoGUI (deferred import). The on-screen
-keyboard toggle drives Windows' built-in ``osk.exe`` so a hand can flip a
-visible keyboard without touching the physical one (Phase 2 "virtual keyboard
-toggle"). Non-Windows hosts simply report the OSK as unavailable.
+Typing is injected through PyAutoGUI (deferred import). Media/volume keys go
+through pynput's low-level key injection (pynput 1.8+ exposes ``media_*`` /
+``volume_*`` keys; on Windows these map to the VK_MEDIA_* / VK_VOLUME_*
+virtual-key codes). The on-screen keyboard toggle drives Windows' built-in
+``osk.exe`` so a hand can flip a visible keyboard without touching the
+physical one (Phase 2 "virtual keyboard toggle"). Non-Windows hosts simply
+report the OSK as unavailable.
 """
 
 from __future__ import annotations
@@ -16,6 +19,17 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 OSK = shutil.which("osk.exe")
+
+#: media action name -> pynput ``Key`` attribute
+MEDIA_KEYS = {
+    "play_pause": "media_play_pause",
+    "next": "media_next",
+    "previous": "media_previous",
+    "stop": "media_stop",
+    "volume_up": "media_volume_up",
+    "volume_down": "media_volume_down",
+    "volume_mute": "media_volume_mute",
+}
 
 
 class VirtualKeyboard:
@@ -88,3 +102,44 @@ class VirtualKeyboard:
             return False
         subprocess.Popen([OSK])
         return True
+
+
+class MediaController:
+    """Media / volume key injection via pynput (cross-platform)."""
+
+    def __init__(self):
+        self._controller = None
+
+    def _ctrl(self):
+        if self._controller is None:
+            from pynput.keyboard import Controller, Key
+
+            self._key = Key
+            self._controller = Controller()
+        return self._controller
+
+    @property
+    def available(self) -> bool:
+        try:
+            self._ctrl()
+            return True
+        except Exception as exc:  # pragma: no cover - input env dependent
+            logger.warning("media controller unavailable: %s", exc)
+            return False
+
+    def action(self, name: str) -> None:
+        """Trigger a media action by name (see ``MEDIA_KEYS``).
+
+        Unknown or unsupported actions are logged and ignored so a stale
+        config or platform quirk never crashes the control loop.
+        """
+        attr = MEDIA_KEYS.get(name)
+        if attr is None:
+            logger.warning("unknown media action %r; ignoring", name)
+            return
+        key = getattr(self._key, attr, None)
+        if key is None:
+            logger.warning("media key %r unsupported on this platform; "
+                           "ignoring", attr)
+            return
+        self._ctrl().tap(key)

@@ -1,26 +1,57 @@
 """Map normalized hand coordinates to screen (cursor) coordinates.
 
-Phase 1 uses an anchor-based linear mapping: normalized (0.5, 0.5) -> screen
-center, and ``gain`` controls how many screen pixels a unit of hand movement
-covers. ``invert_x`` mirrors the webcam selfie view so a rightward hand
-movement moves the cursor right on screen.
+The mapper uses an anchor-based linear mapping: normalized (0.5, 0.5) ->
+screen center, and ``gain`` controls how many screen pixels a unit of hand
+movement covers. ``invert_x`` mirrors the webcam selfie view so a rightward
+hand movement moves the cursor right on screen.
 
-Multi-monitor + homography calibration replace this in Phase 2
-(13_MULTIMONITOR.md) — the mapper interface stays the same.
+Multi-monitor (13_MULTIMONITOR.md): the target "screen" is the **virtual
+desktop** — the union of all monitors, including negative-origin left-of-
+primary layouts. Mapping over the union means a left/right hand sweep lands
+the cursor on the matching monitor; ``zone_for`` identifies which monitor a
+point is on (HUD zones, Phase 4 throw direction).
 """
 
 from __future__ import annotations
 
+import ctypes
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
 ScreenRect = tuple[int, int, int, int]  # x, y, width, height
 
+# Windows SystemMetrics for the virtual-screen bounding box.
+_SM_XVIRTUAL = 76
+_SM_YVIRTUAL = 77
+_SM_CXVIRTUAL = 78
+_SM_CYVIRTUAL = 79
+
+_MonitorEnumProc = ctypes.WINFUNCTYPE(
+    ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong,
+    ctypes.POINTER(ctypes.c_long * 4), ctypes.c_double)
+
+
+def _windows_virtual_screen() -> ScreenRect | None:
+    """Virtual desktop union via Win32 SystemMetrics."""
+    try:
+        user32 = ctypes.windll.user32
+        x = user32.GetSystemMetrics(_SM_XVIRTUAL)
+        y = user32.GetSystemMetrics(_SM_YVIRTUAL)
+        w = user32.GetSystemMetrics(_SM_CXVIRTUAL)
+        h = user32.GetSystemMetrics(_SM_CYVIRTUAL)
+        if w > 0 and h > 0:
+            return (int(x), int(y), int(w), int(h))
+    except Exception:  # pragma: no cover - non-Windows / restricted env
+        pass
+    return None
+
 
 def detect_screen() -> ScreenRect:
-    """Virtual desktop rect from pyautogui (falls back to 1920x1080)."""
+    """Virtual desktop rect (union of all monitors); 1920x1080 fallback."""
+    if _windows_virtual_screen() is not None:
+        return _windows_virtual_screen()  # type: ignore[return-value]
     try:
         import pyautogui
 
@@ -31,6 +62,45 @@ def detect_screen() -> ScreenRect:
         return (0, 0, 1920, 1080)
 
 
+def detect_monitors() -> list[ScreenRect]:
+    """Per-monitor rects in logical (virtual-desktop) coordinates."""
+    rects: list[ScreenRect] = []
+    try:
+        user32 = ctypes.windll.user32
+
+        def _cb(_hmon, _hdc, rect, _lparam) -> int:  # noqa: ANN001
+            r = rect.contents
+            rects.append((int(r[0]), int(r[1]),
+                          int(r[2] - r[0]), int(r[3] - r[1])))
+            return 1
+
+        proc = _MonitorEnumProc(_cb)
+        if user32.EnumDisplayMonitors(0, 0, proc, 0):
+            if rects:
+                return rects
+    except Exception:  # pragma: no cover - non-Windows / restricted env
+        pass
+    try:
+        import pyautogui
+
+        size = pyautogui.size()
+        return [(0, 0, int(size.width), int(size.height))]
+    except Exception:  # pragma: no cover - environment dependent
+        return [(0, 0, 1920, 1080)]
+
+
+def monitor_at(x: int, y: int, monitors: list[ScreenRect]) -> int:
+    """Index of the monitor containing (x, y), or -1 if on no monitor.
+
+    Points outside every monitor (rare, but possible at desktop seams or on
+    mis-detected layouts) return -1 so callers can fall back gracefully.
+    """
+    for i, (mx, my, mw, mh) in enumerate(monitors):
+        if mx <= x < mx + mw and my <= y < my + mh:
+            return i
+    return -1
+
+
 @dataclass
 class MappingConfig:
     gain_x: float = 3.2
@@ -38,6 +108,7 @@ class MappingConfig:
     invert_x: bool = True
     invert_y: bool = False
     screen: ScreenRect | None = None
+    monitors: list[ScreenRect] = field(default_factory=list)
 
     @classmethod
     def from_control(cls, cfg, screen: ScreenRect | None = None) -> "MappingConfig":
@@ -64,6 +135,10 @@ class CursorMapper:
             return s  # type: ignore[return-value]
         return detect_screen()
 
+    @property
+    def monitors(self) -> list[ScreenRect]:
+        return self.config.monitors or detect_monitors()
+
     def to_screen(self, nx: float, ny: float) -> tuple[int, int]:
         """Map normalized (x, y) in [0,1] to (x, y) in screen pixels."""
         x, y, w, h = self.screen
@@ -85,3 +160,12 @@ class CursorMapper:
         px = max(x, min(x + w - 1, px))
         py = max(y, min(y + h - 1, py))
         return (int(round(px)), int(round(py)))
+
+    def point_at_zone(self, nx: float, ny: float) -> tuple[tuple[int, int], int]:
+        """Map a hand position to (screen point, monitor index it lands on).
+
+        This is the "point at a screen zone" primitive: hand far left in the
+        frame lands on the left monitor, far right on the right monitor.
+        """
+        px, py = self.to_screen(nx, ny)
+        return (px, py), monitor_at(px, py, self.monitors)

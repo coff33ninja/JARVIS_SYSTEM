@@ -369,17 +369,66 @@ def test_fps_tracks_frames_without_detection():
 
     pipe, mouse, hud, _ = make_pipeline(HandTrackingResult(), mode=Mode.CONTROL)
     pipe._window_start = 1000.0
-    clock = {"now": 1000.0}
 
-    def _mono():
-        clock["now"] += 0.5
-        return clock["now"]
+    class _FakeTime:
+        now = 1000.0
 
-    with patch("app.perception.pipeline.time.monotonic", side_effect=_mono):
-        pipe.step(FRAME)
+        @staticmethod
+        def monotonic():
+            return _FakeTime.now
+
+    with patch("app.perception.pipeline.time.monotonic", _FakeTime.monotonic):
+        pipe.step(FRAME)  # no hand: fps stays 0 until a second elapses
         assert pipe.stats.last_fps == 0.0
+        _FakeTime.now += 1.0
         pipe.step(FRAME)
         assert pipe.stats.last_fps == 2.0
+
+
+def test_hud_throttles_skeleton_but_streams_reticle():
+    """Skeleton/status are throttled; reticle still broadcasts every frame."""
+    from unittest.mock import patch
+
+    from conftest import point_hand
+
+    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+
+    class _FakeTime:
+        now = 1000.0
+
+        @staticmethod
+        def monotonic():
+            return _FakeTime.now
+
+    with patch("app.perception.pipeline.time.monotonic", _FakeTime.monotonic):
+        pipe.step(FRAME)
+        assert len([e for e in hud.events if e["type"] == "skeleton"]) == 1
+        reticles_before = len([e for e in hud.events if e["type"] == "reticle"])
+        # Advance well past the skeleton throttle interval.
+        _FakeTime.now += 0.2
+        pipe.step(FRAME)
+        skeletons = [e for e in hud.events if e["type"] == "skeleton"]
+        reticles = [e for e in hud.events if e["type"] == "reticle"]
+        assert len(skeletons) == 2          # throttled: only 2 across 2 steps
+        assert len(reticles) == reticles_before + 1  # reticle not throttled
+
+
+def test_loss_grace_keeps_smoothing_then_resets():
+    """Transient 1-frame loss keeps the filter; sustained loss resets it."""
+    from conftest import point_hand
+
+    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    for _ in range(2):
+        pipe.step(FRAME)
+    assert pipe._smoothing is not None
+    # One lost frame: within grace, smoothing survives.
+    tracker.result = HandTrackingResult()
+    pipe.step(FRAME)
+    assert pipe._smoothing is not None
+    # Sustained loss: past grace, the filter fully resets.
+    for _ in range(pipe.config.control.lost_grace_frames):
+        pipe.step(FRAME)
+    assert pipe._smoothing is None
 
 
 def test_default_mapper_built_from_control_config():

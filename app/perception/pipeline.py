@@ -16,7 +16,7 @@ from typing import Callable, Optional
 from ..config import AppConfig
 from ..control.modes import Mode, ModeMachine
 from ..control.virtual_mouse import VirtualMouse
-from ..hud.events import ReticleEvent, SkeletonEvent, StatusEvent
+from ..hud.events import MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
 from .camera import Camera
 from .geometry import classify
 from .hand_tracker import HandLandmarkerTracker
@@ -102,6 +102,10 @@ class ControlPipeline:
         self._swipe_last = 0.0
         self._window_start = time.monotonic()
         self._window_frames = 0
+        self._monitors_sent = False
+        self._lost_frames = 0
+        self._last_skeleton_ts = 0.0
+        self._last_status_ts = 0.0
 
     # ------------------------------------------------------------------ #
     # main loop
@@ -125,10 +129,15 @@ class ControlPipeline:
                 self.mouse.drag_end()
                 self._dragging = False
                 actions.append(PipelineAction("drag_end", gesture="fist"))
-            self._on_hand_lost()
+            self._lost_frames += 1
+            # Grace: brief detection flickers keep the smoothing filter so the
+            # cursor doesn't jump; a sustained loss resets it fully.
+            if self._lost_frames > self.config.control.lost_grace_frames:
+                self._on_hand_lost()
             self._emit(result, None)
             return actions
 
+        self._lost_frames = 0
         self.stats.hands_seen += 1
         lmks = result.hands[0]
 
@@ -333,15 +342,25 @@ class ControlPipeline:
     def _emit(self, result, pose) -> None:
         if self.hud is None:
             return
-        self.hud.broadcast(SkeletonEvent(hands=result.hands or []))
+        now = time.monotonic()
+        if not self._monitors_sent:
+            self.hud.broadcast(MonitorsEvent(monitors=self.mapper.monitors))
+            self._monitors_sent = True
+        if now - self._last_skeleton_ts >= self.config.hud.skeleton_interval_s:
+            self.hud.broadcast(SkeletonEvent(hands=result.hands or []))
+            self._last_skeleton_ts = now
         if pose is not None and pose.index_extended:
-            sx, sy = self.mapper.to_screen(*pose.index_xy)
-            self.hud.broadcast(ReticleEvent(x=sx, y=sy))
+            (sx, sy), monitor = self.mapper.point_at_zone(*pose.index_xy)
+            self.hud.broadcast(ReticleEvent(x=sx, y=sy, monitor=monitor))
         self._emit_status()
 
     def _emit_status(self) -> None:
         if self.hud is None:
             return
+        now = time.monotonic()
+        if now - self._last_status_ts < self.config.hud.status_interval_s:
+            return
+        self._last_status_ts = now
         self.hud.broadcast(StatusEvent(
             mode=self.modes.mode.value,
             fps=self.stats.last_fps,

@@ -67,6 +67,11 @@ class ControlConfig:
     # Debounce: consecutive frames a gesture must hold before it fires.
     hold_frames: int = 2
 
+    # Hand-loss grace: transient detection flickers (1-2 frames) don't reset
+    # the smoothing filter, preventing cursor jumps during tracking noise.
+    # After this many consecutive lost frames the filter fully resets.
+    lost_grace_frames: int = 3
+
     # PyAutoGUI corner fail-safe. Off for gesture control: corners are
     # legitimate cursor targets and the loop has its own abort (ESC/q).
     failsafe: bool = False
@@ -86,6 +91,12 @@ class HudConfig:
     host: str = "127.0.0.1"
     port: int = 8765
     enabled: bool = True
+
+    # Broadcast throttling: skeleton and status are republished at most every
+    # interval (seconds) to keep websocket traffic off the hot path; the
+    # reticle still streams every frame. 0 disables throttling (always send).
+    skeleton_interval_s: float = 0.1
+    status_interval_s: float = 1.0
 
 
 @dataclass
