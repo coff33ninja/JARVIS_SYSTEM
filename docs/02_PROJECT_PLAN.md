@@ -31,7 +31,8 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [x] Open palm actions: catch (Transfer), release (Chat)
 - [x] Presentation mode (F3): point = laser cursor, V-sign/swipe = PageUp/PageDown slides
 - [x] Chat mode wiring (voice trigger) + calibration UI
-- [ ] **Exit criteria:** < 80 ms gesture→action latency; zero misfires in a 10-minute session
+- [x] **Exit criterion (latency):** < 80 ms gesture→action latency — measured by `scripts/bench_latency.py` (`uv run python scripts/bench_latency.py --paced`); ~67 ms estimated / ~63 ms paced at defaults, leaving ~13 ms headroom; `tests/test_latency.py` guards it in CI
+- [ ] **Exit criterion (reliability):** zero misfires in a 10-minute session
 
 **Head start:** `oleg-putseiko/gesture-control` (plugin architecture), `Ns81000/Vision-Mouse` (offline exe, hotkey toggle).
 
