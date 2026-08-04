@@ -36,6 +36,17 @@ class AgentContext:
         return "\n\n".join(blocks)
 
 
+def focused_window_title() -> str:
+    """Title of the foreground window, or 'unknown'. Windows-only; safe fallback."""
+    try:
+        import win32gui
+
+        hwnd = win32gui.GetForegroundWindow()
+        return win32gui.GetWindowText(hwnd) or "unknown"
+    except Exception:
+        return "unknown"
+
+
 def build_context(
     store: MemoryStore,
     recaller: Recaller,

@@ -34,14 +34,14 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 
 **Goal:** "Jarvis" can hear you, think, and act.
 
-- [ ] Local LLM via Ollama (or LM Studio) exposed as OpenAI-compatible endpoint
+- [x] Local LLM via Ollama (or LM Studio) exposed as OpenAI-compatible endpoint (`app/agent/llm.py`)
 - [ ] Voice input: Faster-Whisper STT
 - [ ] Voice output: Piper / Coqui TTS (JARVIS voice)
-- [ ] Simple tool-using agent: open apps, switch windows, web search
-- [ ] Context awareness: current focused window, recent gestures, connected devices
-- [ ] Long-term recall memory: SQLite + FTS5 facts/episodes store (`app/agent/recall/`, see 15_RECALL_MEMORY.md)
-- [ ] Semantic recall via Ollama embeddings (optional; keyword fallback when offline)
-- [ ] Context builder: compose recent history + recalled memories into LLM prompts (`app/agent/context.py`)
+- [x] Simple tool-using agent: open apps, switch windows, web search (`app/agent/agent.py` + `tools/`)
+- [ ] Context awareness: current focused window (done), recent gestures, connected devices
+- [x] Long-term recall memory: SQLite + FTS5 facts/episodes store (`app/agent/recall/`, see 15_RECALL_MEMORY.md)
+- [x] Semantic recall via Ollama embeddings (optional; keyword fallback when offline)
+- [x] Context builder: compose recent history + recalled memories into LLM prompts (`app/agent/context.py`)
 - [ ] Overlay chat bubbles / transcript panel
 - [ ] **Exit criteria:** say "Jarvis, open the project folder" and it opens; voice round-trip < 2 s
 

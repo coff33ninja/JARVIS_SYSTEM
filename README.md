@@ -46,6 +46,7 @@ A system that:
 | [docs/13_MULTIMONITOR.md](docs/13_MULTIMONITOR.md) | Multi-monitor zone math + mixed-DPI handling |
 | [docs/14_STARTER_COMBO.md](docs/14_STARTER_COMBO.md) | Which existing repos to borrow vs. build from scratch |
 | [docs/15_RECALL_MEMORY.md](docs/15_RECALL_MEMORY.md) | Agent long-term memory: SQLite + FTS5 + optional Ollama embeddings, context builder |
+| [docs/16_AGENT.md](docs/16_AGENT.md) | Phase 3 agent: LLM client, tool registry, agent loop, graceful degradation |
 
 ## Provenance
 

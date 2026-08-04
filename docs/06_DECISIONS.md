@@ -71,6 +71,14 @@ Architecture Decision Records. Each entry records a decision made during plannin
 - **Decision:** SQLite-backed store in `app/agent/recall/` with an FTS5 keyword index as the always-on recall path, plus an optional semantic layer that embeds rows through Ollama's OpenAI-compatible embeddings endpoint (the `openai` client is already a dependency). The retriever fuses keyword and semantic scores with configurable weights; if the embedder is down or disabled, recall degrades to keyword-only (ADR-005, graceful degradation).
 - **Consequences:** Keyword recall always works with no external services. Semantic recall requires Ollama running with an embedding model pulled, and currently scans stored vectors linearly (acceptable at MVP scale; swap in a real vector index in Phase 6 if it grows). All content stays on disk locally, consistent with ADR-005.
 
+## ADR-010: Hand-rolled tool loop with a pluggable tool registry
+
+- **Status:** Accepted
+- **Context:** The Phase 3 agent needs tool calling (open apps, switch windows, web search, memory). `14_STARTER_COMBO.md` decided against forking a full agent framework.
+- **Options:** (a) Open Interpreter / Continue / other agent framework; (b) a thin hand-rolled loop over the OpenAI-compatible chat API with a Python tool registry.
+- **Decision:** Thin `Agent` loop (`app/agent/agent.py`) over the chat API with a `ToolRegistry` of pure-Python functions exposing JSON-schema tool definitions. Memory is exposed as `recall` / `remember` tools, so long-term memory is used exactly like any other tool. Tool iteration is bounded (`max_tool_iterations`), and models that reject tool requests (HTTP 400, e.g. `smallthinker`) are retried once without tools so the agent degrades gracefully.
+- **Consequences:** We own iteration bounds, error handling, and tool safety. Per-model tool-calling quirks surface at the compatibility layer (`llm.py`), consistent with ADR-003.
+
 ## Open Questions / Deferred Decisions
 
 - **Q-01:** Whether the tablet runs its own gesture detector or is a "ready to receive" peer only. Deferred to Phase 4.
