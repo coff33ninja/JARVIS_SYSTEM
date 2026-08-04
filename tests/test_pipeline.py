@@ -528,6 +528,78 @@ def test_primary_hand_prefers_right():
     assert not any(c[0] == "move" for c in mouse.calls)
 
 
+def _pinch_zoom_hands(dx):
+    """Both hands pinching, palm centers |dx| apart around center."""
+    return two_hands(_shift(pinch_hand(), dx, 0.0),
+                     _shift(pinch_hand(), -dx, 0.0))
+
+
+def _zoom_actions(pipe, frames):
+    return [a for _ in range(frames) for a in pipe.step(FRAME)]
+
+
+def test_two_hand_pinch_apart_zooms_in():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = _pinch_zoom_hands(0.1)
+    assert not [a for a in pipe.step(FRAME) if "zoom" in a.name]  # sets ref
+    tracker.result = _pinch_zoom_hands(0.2)  # spread grew by 0.2 -> 4 ticks
+    actions = _zoom_actions(pipe, 1)
+    assert [a.name for a in actions].count("zoom_in") == 4
+    assert not any(a.name == "zoom_out" for a in actions)
+    assert [c for c in mouse.calls if c[0] == "hotkey"].count(("hotkey", ("ctrl", "+"))) == 4
+
+
+def test_two_hand_pinch_together_zooms_out():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = _pinch_zoom_hands(0.3)
+    pipe.step(FRAME)
+    tracker.result = _pinch_zoom_hands(0.2)  # spread shrank by 0.2 -> 4 ticks
+    actions = _zoom_actions(pipe, 1)
+    assert [a.name for a in actions].count("zoom_out") == 4
+    assert not any(a.name == "zoom_in" for a in actions)
+
+
+def test_two_hand_zoom_ignores_open_palms():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = _spread_result()  # open palms, not pinching
+    pipe.step(FRAME)
+    pipe.step(FRAME)
+    assert not [c for c in mouse.calls if c[0] == "hotkey"]
+
+
+def test_two_hand_zoom_requires_both_pinching():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = two_hands(_shift(pinch_hand(), 0.2, 0.0),
+                               _shift(open_hand(), -0.2, 0.0))
+    for _ in range(3):
+        pipe.step(FRAME)
+    assert not [c for c in mouse.calls if c[0] == "hotkey"]
+
+
+def test_two_hand_zoom_not_in_chat():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CHAT)
+    tracker.result = _pinch_zoom_hands(0.1)
+    pipe.step(FRAME)
+    tracker.result = _pinch_zoom_hands(0.2)
+    assert not [c for c in mouse.calls if c[0] == "hotkey"]
+
+
+def test_two_hand_zoom_rearms_after_release_and_hand_loss():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = _pinch_zoom_hands(0.1)
+    pipe.step(FRAME)
+    tracker.result = _pinch_zoom_hands(0.2)
+    assert any(a.name == "zoom_in" for a in pipe.step(FRAME))
+    # Release one hand (re-arm), then spread again from the same base.
+    tracker.result = hands(pinch_hand())
+    pipe.step(FRAME)
+    tracker.result = _pinch_zoom_hands(0.1)
+    pipe.step(FRAME)  # re-established reference, no tick yet
+    tracker.result = _pinch_zoom_hands(0.2)
+    actions = _zoom_actions(pipe, 1)
+    assert any(a.name == "zoom_in" for a in actions)
+
+
 def test_open_palm_catch_in_transfer_fires_once():
     pipe, mouse, hud, _ = make_pipeline(hands(open_hand()), mode=Mode.TRANSFER)
     all_actions = []

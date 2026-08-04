@@ -16,7 +16,7 @@ Reference spec for gesture → action mapping. Hand landmarks use MediaPipe's 21
 | Thumbs down | Thumb down, fingers curled | Reject / cancel | Chat |
 | Swipe (left/right) | Hand sweeps sideways | Alt+Tab / switch window / next track | Control |
 | Two-hand spread | Both palms far apart, held ~2 frames | Toggle Control ↔ Transfer mode | Control, Transfer |
-| Two-hand pinch apart | Both hands spread | Zoom / launch transfer-ready mode | Control, Transfer |
+| Two-hand pinch apart | Both hands pinch, then palms move apart / together | Zoom in (Ctrl++) / out (Ctrl+-); 1 tick per `two_hand_zoom_threshold` of accumulated palm-center movement | Control, Transfer |
 | Grab (fist held still) | Fist, stationary 500 ms | Pick up selected content | Transfer |
 | Throw (flick) | Fist → open hand with forward velocity | Send selected content to target device | Transfer |
 | Catch (open palm) | Open palm, facing up | Accept incoming content | Transfer |
@@ -53,6 +53,8 @@ Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice comma
 Swipe (in Control) fires `Alt+Tab` (swipe right) / `Alt+Shift+Tab` (swipe left) via a configurable threshold (`control.swipe_threshold_px`, default 250 px of accumulated screen motion).
 
 Two-hand spread toggles Control ↔ Transfer (`control.two_hand_spread_threshold`, default 0.4 normalized palm-center distance; held for `control.hold_frames`). While both hands are tracked, the cursor follows the configured preferred hand (`control.preferred_hand`, default "Right"). Open palm acts in Transfer (`catch`) and Chat (`release`), both edge-triggered.
+
+Two-hand pinch-apart zoom: while both hands pinch, palm-center distance changes fire `Ctrl++` (apart) / `Ctrl+-` (together) — one tick per `control.two_hand_zoom_threshold` (default 0.05) of accumulated distance change, active in Control and Transfer. Releasing either pinch (or losing a hand) re-arms the reference so the next pinch starts from a fresh distance.
 
 In Presentation mode (F3), V-sign and swipe navigate slides instead of scrolling / switching windows: an upward V-sign sweep or left swipe fires `PageUp` (previous slide); downward or right fires `PageDown` (next slide). Point still moves the cursor as a laser pointer.
 

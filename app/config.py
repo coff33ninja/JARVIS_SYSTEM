@@ -79,6 +79,12 @@ class ControlConfig:
     preferred_hand: str = "Right"
     two_hand_spread_threshold: float = 0.4   # normalized palm-center distance
 
+    # Two-hand pinch-apart (vocabulary "two-hand pinch apart"): while both
+    # hands pinch, moving the palms apart zooms in (Ctrl++) and together zooms
+    # out (Ctrl+-). One tick per threshold of accumulated palm-center distance
+    # change; re-arms when either hand releases the pinch.
+    two_hand_zoom_threshold: float = 0.05
+
     # PyAutoGUI corner fail-safe. Off for gesture control: corners are
     # legitimate cursor targets and the loop has its own abort (ESC/q).
     failsafe: bool = False

@@ -93,6 +93,8 @@ class ControlPipeline:
         self._prev_open_palm = False
         self._spread_active = False
         self._spread_frames = 0
+        self._zoom_ref: float | None = None
+        self._zoom_accum = 0.0
         self._dragging = False
         self._last_gesture = ""
         self._gesture_frames = 0
@@ -149,6 +151,7 @@ class ControlPipeline:
             return actions
 
         self._spread(result)
+        self._two_hand_zoom(result, actions)
         pose = classify(lmks)
         self._emit(result, pose)
         actions.extend(self._dispatch(pose))
@@ -196,6 +199,43 @@ class ControlPipeline:
         else:
             self._spread_frames = 0
             self._spread_active = False
+
+    def _two_hand_zoom(self, result, actions: list[PipelineAction]) -> None:
+        """Two-hand pinch-apart zoom (Control / Transfer).
+
+        While both hands pinch, accumulated palm-center distance change drives
+        zoom ticks: palms apart -> ``zoom_in`` (Ctrl++), together ->
+        ``zoom_out`` (Ctrl+-). One tick per ``two_hand_zoom_threshold`` of
+        movement; releasing either pinch re-arms the reference so the next
+        spread starts from a fresh distance.
+        """
+        hands = result.hands or []
+        if (len(hands) < 2
+                or self.modes.mode not in (Mode.CONTROL, Mode.TRANSFER)):
+            self._zoom_ref = None
+            self._zoom_accum = 0.0
+            return
+        if not (classify(hands[0]).pinch and classify(hands[1]).pinch):
+            self._zoom_ref = None
+            self._zoom_accum = 0.0
+            return
+        spread = two_hand_spread(hands[0], hands[1])
+        if self._zoom_ref is None:
+            self._zoom_ref = spread
+            return
+        self._zoom_accum += spread - self._zoom_ref
+        self._zoom_ref = spread
+        threshold = self.config.control.two_hand_zoom_threshold
+        eps = 1e-9
+        while abs(self._zoom_accum) + eps >= threshold:
+            if self._zoom_accum > 0:
+                self.mouse.hotkey("ctrl", "+")
+                actions.append(PipelineAction("zoom_in", gesture="two_hand_pinch"))
+                self._zoom_accum -= threshold
+            else:
+                self.mouse.hotkey("ctrl", "-")
+                actions.append(PipelineAction("zoom_out", gesture="two_hand_pinch"))
+                self._zoom_accum += threshold
 
     # ------------------------------------------------------------------ #
     # gesture dispatch
@@ -404,6 +444,8 @@ class ControlPipeline:
         self._prev_open_palm = False
         self._spread_active = False
         self._spread_frames = 0
+        self._zoom_ref = None
+        self._zoom_accum = 0.0
         self._last_gesture = None
         self._gesture_frames = 0
         self._v_sign_active = False

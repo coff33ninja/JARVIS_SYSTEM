@@ -28,6 +28,7 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [x] HUD overlay: skeleton, reticle, mode/fps/gesture status, monitor-layout map
 - [x] FPS/stability: throttled HUD broadcasts (skeleton/status), hand-loss grace period
 - [x] Two-hand detection + spread gesture: toggles Control ↔ Transfer mode
+- [x] Two-hand pinch-apart zoom: both hands pinch, palms apart = Ctrl++ / together = Ctrl+- (Control, Transfer); 1 tick per `control.two_hand_zoom_threshold` of accumulated palm-center movement, re-arms on release/hand-loss
 - [x] Open palm actions: catch (Transfer), release (Chat)
 - [x] Presentation mode (F3): point = laser cursor, V-sign/swipe = PageUp/PageDown slides
 - [x] Chat mode wiring (voice trigger) + calibration UI — voice→mode router (`app/control/mode_voice.py`) wired into `VoiceLoop.on_command`; end-to-end Idle→wake→Control→voice("chat mode")→Chat→voice→Control flow verified in `tests/test_chat_wiring.py`
