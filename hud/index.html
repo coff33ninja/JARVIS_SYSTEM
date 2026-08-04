@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JARVIS HUD</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden;
+               font-family: "Segoe UI", system-ui, sans-serif; }
+  #hud { position: fixed; inset: 0; }
+  #status { position: fixed; left: 16px; top: 12px; color: #6ee7ff;
+            font-size: 14px; text-shadow: 0 0 6px rgba(110,231,255,.6);
+            z-index: 2; user-select: none; }
+  #retX { position: fixed; left: 50%; top: 50%; width: 0; height: 0; z-index: 1;
+          pointer-events: none; }
+  .line { position: absolute; background: rgba(110,231,255,.85);
+          box-shadow: 0 0 8px rgba(110,231,255,.8); }
+  .hl  { width: 34px; height: 2px; transform: translate(-50%,-50%); }
+  .vl  { width: 2px; height: 34px; transform: translate(-50%,-50%); }
+  #skeleton { position: fixed; inset: 0; z-index: 0; opacity: .9; }
+</style>
+</head>
+<body>
+  <div id="status">JARVIS HUD — waiting for connection…</div>
+  <div id="retX"><div class="line hl"></div><div class="line vl"></div></div>
+  <canvas id="skeleton"></canvas>
+<script>
+(function () {
+  const status = document.getElementById('status');
+  const ret = document.getElementById('retX');
+  const canvas = document.getElementById('skeleton');
+  const ctx = canvas.getContext('2d');
+
+  function sizeCanvas() {
+    canvas.width = window.innerWidth * devicePixelRatio;
+    canvas.height = window.innerHeight * devicePixelRatio;
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  }
+  sizeCanvas();
+  window.addEventListener('resize', sizeCanvas);
+
+  const CONN = {0: 'wrist', 1: 'thumb_cmc', 2: 'thumb_mcp', 3: 'thumb_ip',
+    4: 'thumb_tip', 5: 'index_mcp', 6: 'index_pip', 7: 'index_dip',
+    8: 'index_tip', 9: 'middle_mcp', 10: 'middle_pip', 11: 'middle_dip',
+    12: 'middle_tip', 13: 'ring_mcp', 14: 'ring_pip', 15: 'ring_dip',
+    16: 'ring_tip', 17: 'pinky_mcp', 18: 'pinky_pip', 19: 'pinky_dip',
+    20: 'pinky_tip'};
+  const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],
+    [9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],
+    [17,18],[18,19],[19,20],[0,17]];
+
+  function drawSkeleton(hands) {
+    const w = window.innerWidth, h = window.innerHeight;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(110,231,255,.55)';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(110,231,255,.95)';
+    for (const lm of hands) {
+      for (const [a, b] of BONES) {
+        ctx.beginPath();
+        ctx.moveTo(lm[a][0]*w, lm[a][1]*h);
+        ctx.lineTo(lm[b][0]*w, lm[b][1]*h);
+        ctx.stroke();
+      }
+      for (const p of lm) {
+        ctx.beginPath();
+        ctx.arc(p[0]*w, p[1]*h, 3, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+
+  let ws = null, reconn = 0;
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}`);
+    ws.onopen = () => { status.textContent = 'JARVIS HUD — connected'; };
+    ws.onclose = () => {
+      status.textContent = 'JARVIS HUD — disconnected, reconnecting…';
+      setTimeout(connect, Math.min(30000, 500 * (reconn++)));
+    };
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'skeleton') drawSkeleton(msg.hands || []);
+      else if (msg.type === 'reticle') {
+        ret.style.left = msg.x + 'px';
+        ret.style.top = msg.y + 'px';
+      } else if (msg.type === 'status') {
+        status.textContent = `JARVIS HUD — mode ${msg.mode}` +
+          (msg.fps ? ` · ${msg.fps.toFixed(0)} fps` : '') +
+          (msg.detected ? ' · hand' : '');
+      }
+    };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

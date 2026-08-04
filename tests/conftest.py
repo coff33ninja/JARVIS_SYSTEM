@@ -7,6 +7,12 @@ import pytest
 
 from app.agent.recall.config import EmbedderConfig
 from app.agent.recall.store import MemoryStore
+from app.perception.geometry import (  # noqa: F401  (landmark indices for helpers)
+    INDEX_TIP,
+    MIDDLE_TIP,
+    THUMB_IP,
+    THUMB_TIP,
+)
 
 
 @pytest.fixture
@@ -56,3 +62,93 @@ class FakeEmbedder:
 @pytest.fixture
 def fake_embedder():
     return FakeEmbedder()
+
+
+# --------------------------------------------------------------------------- #
+# Synthetic 21-landmark hands (Phase 1 geometry tests)
+# --------------------------------------------------------------------------- #
+#
+# Landmarks are (x, y, z) normalized to [0,1], built from a simple skeleton:
+# wrist at origin-ish, four fingers raycast upward, thumb on the +x side.
+# `ext` controls how far each fingertip reaches (1.0 = extended, 0.0 = curled).
+
+_WRIST = (0.50, 0.50, 0.0)
+
+_MCP = {
+    "index": (0.58, 0.60, 0.0),
+    "middle": (0.50, 0.62, 0.0),
+    "ring": (0.42, 0.60, 0.0),
+    "pinky": (0.35, 0.57, 0.0),
+}
+_DIR = {
+    "index": (-0.10, -1.0),
+    "middle": (0.00, -1.0),
+    "ring": (0.05, -1.0),
+    "pinky": (0.10, -1.0),
+}
+_LEN = {"index": 0.10, "middle": 0.11, "ring": 0.10, "pinky": 0.09}
+_THUMB = {"cmc": (0.62, 0.54, 0.0), "mcp": (0.66, 0.50, 0.0),
+          "ip": (0.70, 0.46, 0.0), "tip": (0.73, 0.43, 0.0)}
+
+
+def _lerp(a, b, t):
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+
+
+def make_hand(fingers=None, pinch="none", thumb_tip=None):
+    """Build a synthetic 21-landmark hand.
+
+    fingers: dict of finger -> ext in [0,1] (default: all extended).
+    pinch:   "none" | "index" | "middle" — draws the thumb to that fingertip.
+    """
+    fingers = fingers or {"index": 1.0, "middle": 1.0, "ring": 1.0, "pinky": 1.0}
+    lm = [_WRIST]
+    # thumb joints (base positions, may be overwritten by pinch below)
+    lm.append(_THUMB["cmc"])
+    lm.append(_THUMB["mcp"])
+    lm.append(_THUMB["ip"])
+    lm.append(_THUMB["tip"])
+    for name in ("index", "middle", "ring", "pinky"):
+        mcp = _MCP[name]
+        dx, dy = _DIR[name]
+        ext = max(0.0, min(1.0, fingers.get(name, 1.0)))
+        tip = (mcp[0] + dx * _LEN[name] * ext,
+               mcp[1] + dy * _LEN[name] * ext, 0.0)
+        pip = _lerp(mcp, tip, 0.35)
+        dip = _lerp(mcp, tip, 0.62)
+        lm.extend((mcp, pip, dip, tip))
+    if pinch == "index":
+        lm[THUMB_TIP] = lm[INDEX_TIP]
+        lm[THUMB_IP] = _lerp(lm[THUMB_TIP], _THUMB["mcp"], 0.6)
+    elif pinch == "middle":
+        lm[THUMB_TIP] = lm[MIDDLE_TIP]
+        lm[THUMB_IP] = _lerp(lm[THUMB_TIP], _THUMB["mcp"], 0.6)
+    if thumb_tip is not None:
+        lm[THUMB_TIP] = thumb_tip
+    return lm
+
+
+def open_hand():
+    return make_hand()
+
+
+def fist():
+    return make_hand({"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0})
+
+
+def v_sign():
+    return make_hand({"index": 1.0, "middle": 1.0, "ring": 0.0, "pinky": 0.0})
+
+
+def point_hand():
+    return make_hand({"index": 1.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0})
+
+
+def pinch_hand():
+    return make_hand(fingers={"index": 1.0, "middle": 0.0, "ring": 0.0,
+                              "pinky": 0.0}, pinch="index")
+
+
+def two_pinch_hand():
+    return make_hand(fingers={"index": 0.0, "middle": 1.0, "ring": 0.0,
+                              "pinky": 0.0}, pinch="middle")

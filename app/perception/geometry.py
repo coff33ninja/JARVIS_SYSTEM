@@ -1,0 +1,162 @@
+"""Hand-geometry gesture classification from the 21 MediaPipe landmarks.
+
+Pure math over landmark tuples ``(x, y, z)`` normalized to [0, 1] — no
+MediaPipe runtime needed, so every classifier is unit-testable with synthetic
+landmark sets (09_TESTING "Gesture geometry" section).
+
+Landmark index map (MediaPipe hand model):
+  wrist=0  thumb=1..4  index=5..8  middle=9..12  ring=13..16  pinky=17..20
+where ``*_MCP`` is the metacarpal base and ``*_TIP`` the fingertip.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+# Landmark indices (MediaPipe 21-point hand model).
+WRIST = 0
+THUMB_CMC, THUMB_MCP, THUMB_IP, THUMB_TIP = 1, 2, 3, 4
+INDEX_MCP, INDEX_PIP, INDEX_DIP, INDEX_TIP = 5, 6, 7, 8
+MIDDLE_MCP, MIDDLE_PIP, MIDDLE_DIP, MIDDLE_TIP = 9, 10, 11, 12
+RING_MCP, RING_PIP, RING_DIP, RING_TIP = 13, 14, 15, 16
+PINKY_MCP, PINKY_PIP, PINKY_DIP, PINKY_TIP = 17, 18, 19, 20
+
+# The four non-thumb fingers: (tip, dip, mcp).
+FINGERS = {
+    "index": (INDEX_TIP, INDEX_DIP, INDEX_MCP),
+    "middle": (MIDDLE_TIP, MIDDLE_DIP, MIDDLE_MCP),
+    "ring": (RING_TIP, RING_DIP, RING_MCP),
+    "pinky": (PINKY_TIP, PINKY_DIP, PINKY_MCP),
+}
+
+Landmark = tuple[float, float, float]
+Landmarks = list[Landmark] | tuple[Landmark, ...]
+
+
+@dataclass
+class GeometryConfig:
+    """Gesture thresholds, normalized by hand size (scale invariant)."""
+
+    pinch_threshold: float = 0.06
+    two_finger_pinch_threshold: float = 0.06
+
+    @classmethod
+    def from_control(cls, cfg) -> "GeometryConfig":
+        return cls(
+            pinch_threshold=cfg.pinch_threshold,
+            two_finger_pinch_threshold=cfg.two_finger_pinch_threshold,
+        )
+
+
+@dataclass
+class HandPose:
+    """Classified hand state for one frame."""
+
+    index_xy: tuple[float, float] = (0.5, 0.5)
+    index_extended: bool = False
+    pinch: bool = False
+    two_finger_pinch: bool = False
+    fist: bool = False
+    open_palm: bool = False
+    v_sign: bool = False
+
+    @property
+    def name(self) -> str:
+        if self.fist:
+            return "fist"
+        if self.two_finger_pinch:
+            return "two_finger_pinch"
+        if self.pinch:
+            return "pinch"
+        if self.v_sign:
+            return "v_sign"
+        if self.open_palm:
+            return "open_palm"
+        if self.index_extended:
+            return "point"
+        return "none"
+
+
+def distance(a: Landmark, b: Landmark) -> float:
+    """Euclidean distance between two landmarks (x, y, z)."""
+    return math.dist(a, b)
+
+
+def hand_size(lmks: Landmarks) -> float:
+    """Normalization reference: wrist -> middle MCP distance.
+
+    Falling back to ~0.1 keeps thresholds finite for degenerate input so
+    classification never throws (callers treat tiny hands as "none").
+    """
+    d = distance(lmks[WRIST], lmks[MIDDLE_MCP])
+    return d if d > 1e-6 else 0.1
+
+
+def palm_center(lmks: Landmarks) -> Landmark:
+    """Robust palm center: mean of wrist, index MCP, pinky MCP."""
+    return tuple(
+        (lmks[WRIST][i] + lmks[INDEX_MCP][i] + lmks[PINKY_MCP][i]) / 3.0
+        for i in range(3)
+    )
+
+
+def finger_extended(lmks: Landmarks, name: str) -> bool:
+    """True when a fingertip is pushed out past its DIP joint.
+
+    Rotation-invariant: compares distance from the finger MCP base to the
+    tip vs. to the DIP. Curled fingers pull the tip back inside the DIP.
+    """
+    tip, dip, mcp = FINGERS[name]
+    return distance(lmks[tip], lmks[mcp]) > distance(lmks[dip], lmks[mcp])
+
+
+def finger_tip(lmks: Landmarks, name: str) -> Landmark:
+    tip, _, _ = FINGERS[name]
+    return lmks[tip]
+
+
+def pinch_ratio(lmks: Landmarks, thumb: Landmark | None = None,
+                finger_tip: Landmark | None = None) -> float:
+    """Distance between thumb tip and a fingertip, normalized by hand size."""
+    size = hand_size(lmks)
+    a = thumb if thumb is not None else lmks[THUMB_TIP]
+    b = finger_tip if finger_tip is not None else lmks[INDEX_TIP]
+    return distance(a, b) / size
+
+
+def point_position(lmks: Landmarks) -> tuple[float, float]:
+    """Normalized [0,1] (x, y) of the index fingertip for cursor mapping."""
+    lm = lmks[INDEX_TIP]
+    return (max(0.0, min(1.0, lm[0])), max(0.0, min(1.0, lm[1])))
+
+
+def classify(lmks: Landmarks, cfg: GeometryConfig | None = None) -> HandPose:
+    """Classify a 21-landmark hand into a gesture-usable HandPose.
+
+    Gesture precedence (first match wins): fist > pinch > two-finger-pinch >
+    open-palm > V-sign > point. This ordering keeps an open palm from being
+    mistaken for a point, and a pinch from double-firing while moving.
+    """
+    cfg = cfg or GeometryConfig()
+    index_ext = finger_extended(lmks, "index")
+    middle_ext = finger_extended(lmks, "middle")
+    ring_ext = finger_extended(lmks, "ring")
+    pinky_ext = finger_extended(lmks, "pinky")
+
+    idx = finger_tip(lmks, "index")
+    mid = finger_tip(lmks, "middle")
+    pinch_ratio_ = pinch_ratio(lmks, lmks[THUMB_TIP], idx)
+    two_pinch_ratio = pinch_ratio(lmks, lmks[THUMB_TIP], mid)
+
+    any_ext = index_ext or middle_ext or ring_ext or pinky_ext
+
+    return HandPose(
+        index_xy=point_position(lmks),
+        index_extended=index_ext,
+        pinch=pinch_ratio_ < cfg.pinch_threshold and index_ext,
+        two_finger_pinch=two_pinch_ratio < cfg.two_finger_pinch_threshold,
+        fist=not any_ext,
+        open_palm=index_ext and middle_ext and ring_ext and pinky_ext,
+        v_sign=index_ext and middle_ext and not ring_ext and not pinky_ext,
+    )
