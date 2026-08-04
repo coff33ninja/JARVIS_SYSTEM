@@ -87,6 +87,16 @@ Direction sensing: projected velocity vector of the wrist/mean hand point determ
 - Confidence thresholds per gesture
 - Per-monitor layout mapping
 
+## Calibration UI
+
+When the app is running with the HUD enabled, a calibration server listens on
+`http://127.0.0.1:8766/` (link in the HUD's bottom-right corner). The page
+edits perception/control values and applies them live — sensitivity and
+smoothing changes take effect immediately; camera/resolution changes report
+"restart required". The monitor layout is drawn so the mapping area can be
+verified against the physical setup. Host/port are configurable via
+`hud.calibrate_host` / `hud.calibrate_port`.
+
 ## Calibration Test Procedure
 
 Run after any camera/monitor change. Each step has a pass criterion; record values in `config/` per profile.

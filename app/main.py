@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import cv2
 
+from app.calibrate.server import CalibrationConfig, CalibrationServer
 from app.config import AppConfig
 from app.control.virtual_keyboard import MediaController, VirtualKeyboard
 from app.control.virtual_mouse import VirtualMouse
@@ -61,6 +62,13 @@ def main(argv: list[str] | None = None) -> int:
         return _smoke(cfg)
 
     pipeline = build_pipeline(args, cfg)
+    calibrate = None
+    if not args.no_hud and cfg.hud.enabled:
+        calibrate = CalibrationServer(
+            config=cfg, live_pipeline=pipeline,
+            server_config=CalibrationConfig(
+                host=cfg.hud.calibrate_host, port=cfg.hud.calibrate_port))
+        calibrate.start()
     keyboard = VirtualKeyboard()
     media = MediaController()
     stop = _StopKey(
@@ -83,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         pass
     finally:
         stop.close()
+        if calibrate is not None:
+            calibrate.stop()
         pipeline.close()
     return 0
 

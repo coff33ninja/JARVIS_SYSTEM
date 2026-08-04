@@ -74,4 +74,4 @@ Controls: pinch = click, two-finger pinch = right click, fist = drag, V-sign = s
 
 The HUD overlay (`hud/index.html`, served at the websocket port) draws the hand skeleton, cursor reticle, current mode/fps/gesture, and a monitor-layout map; skeleton/status broadcasts are throttled so the webcam loop stays fast.
 
-Phase 2+ (see `docs/02_PROJECT_PLAN.md`): remaining full gesture set, mode system refinements, calibration UI.
+Phase 2+ (see `docs/02_PROJECT_PLAN.md`): remaining full gesture set, mode system refinements. Calibration UI is live: with the HUD running, open `http://127.0.0.1:8766/` to edit sensitivity/control values (live-applied) and check the monitor layout.

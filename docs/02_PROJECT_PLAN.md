@@ -30,7 +30,7 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [x] Two-hand detection + spread gesture: toggles Control ↔ Transfer mode
 - [x] Open palm actions: catch (Transfer), release (Chat)
 - [x] Presentation mode (F3): point = laser cursor, V-sign/swipe = PageUp/PageDown slides
-- [ ] Chat mode wiring (voice trigger) + calibration UI
+- [x] Chat mode wiring (voice trigger) + calibration UI
 - [ ] **Exit criteria:** < 80 ms gesture→action latency; zero misfires in a 10-minute session
 
 **Head start:** `oleg-putseiko/gesture-control` (plugin architecture), `Ns81000/Vision-Mouse` (offline exe, hotkey toggle).

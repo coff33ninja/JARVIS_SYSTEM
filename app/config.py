@@ -105,6 +105,11 @@ class HudConfig:
     skeleton_interval_s: float = 0.1
     status_interval_s: float = 1.0
 
+    # Calibration UI: a small local HTTP server (app/calibrate/) exposing the
+    # config API + form page. Disabled when hud.enabled is false.
+    calibrate_host: str = "127.0.0.1"
+    calibrate_port: int = 8766
+
 
 @dataclass
 class AppConfig:
@@ -153,6 +158,22 @@ class AppConfig:
     @classmethod
     def defaults(cls) -> "AppConfig":
         return cls()
+
+
+def update_config(cfg: AppConfig, data: dict[str, Any]) -> AppConfig:
+    """Merge validated values from raw YAML/JSON dicts onto ``cfg`` in place.
+
+    Unknown keys are ignored and invalid values fall back to the field
+    default (mirroring ``AppConfig.load``), so a hand-edited or POSTed config
+    never bricks the app. Used by the calibration UI to apply live changes.
+    """
+    for section in ("perception", "control", "hud"):
+        target = getattr(cfg, section)
+        raw = data.get(section)
+        if not isinstance(raw, dict):
+            continue
+        _apply_section(target, raw)
+    return cfg
 
 
 def _apply_section(target: Any, raw: dict[str, Any]) -> None:

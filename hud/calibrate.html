@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JARVIS — Calibration</title>
+<style>
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif;
+         background: #0b1016; color: #d9fbff; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; color: #6ee7ff;
+       text-shadow: 0 0 8px rgba(110,231,255,.5); }
+  .sub { color: #7a8a99; font-size: 12px; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          gap: 16px; }
+  section { background: rgba(110,231,255,.05); border: 1px solid rgba(110,231,255,.2);
+            border-radius: 8px; padding: 14px; }
+  section h2 { font-size: 13px; margin: 0 0 12px; color: #6ee7ff;
+               text-transform: uppercase; letter-spacing: .08em; }
+  .field { display: grid; grid-template-columns: 150px 1fr; gap: 8px;
+           align-items: center; margin-bottom: 8px; font-size: 13px; }
+  .field label { color: #b9cad9; }
+  .field label .help { display: block; font-size: 10px; color: #6c7d8c; }
+  .field input, .field select { background: #0f1620; color: #d9fbff;
+        border: 1px solid rgba(110,231,255,.25); border-radius: 4px;
+        padding: 5px 8px; font-size: 13px; width: 100%; box-sizing: border-box; }
+  .field input[type=checkbox] { width: auto; }
+  .actions { display: flex; gap: 10px; margin-top: 18px; }
+  button { background: #6ee7ff; color: #06222b; border: none; border-radius: 6px;
+           padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; border: 1px solid rgba(110,231,255,.4);
+                     color: #6ee7ff; }
+  #msg { margin-left: 12px; align-self: center; font-size: 13px; }
+  #msg.ok { color: #8ce99a; } #msg.err { color: #ff8fa3; }
+  #restart { display: none; margin-top: 12px; background: rgba(255,143,163,.1);
+             border: 1px solid #ff8fa3; color: #ff8fa3; border-radius: 6px;
+             padding: 8px 12px; font-size: 13px; }
+  #map { width: 100%; margin-top: 10px; border: 1px solid rgba(110,231,255,.2);
+         border-radius: 6px; background: rgba(0,0,0,.3); }
+  .mon-list { font-size: 12px; color: #8ba3b5; margin-top: 8px; line-height: 1.6; }
+  code { color: #6ee7ff; }
+</style>
+</head>
+<body>
+  <h1>JARVIS — Calibration</h1>
+  <div class="sub">Tune camera, sensitivity, smoothing, and gestures. Save applies
+    live where possible; camera changes need a restart.</div>
+  <div id="root" class="grid"></div>
+  <div class="actions">
+    <button id="save">Save &amp; Apply</button>
+    <button id="reload" class="secondary">Reload</button>
+    <span id="msg"></span>
+  </div>
+  <div id="restart"></div>
+  <h1 style="margin-top:28px">Monitor Layout</h1>
+  <canvas id="map" width="600" height="240"></canvas>
+  <div id="monList" class="mon-list"></div>
+
+<script>
+(function () {
+  const root = document.getElementById('root');
+  const msg = document.getElementById('msg');
+  const restart = document.getElementById('restart');
+  const mctx = document.getElementById('map').getContext('2d');
+
+  // Field schema: type drives the input control; help is shown under the label.
+  const SCHEMA = {
+    perception: {
+      camera_index: {label: 'Camera index', type: 'int'},
+      width: {label: 'Width (px)', type: 'int'},
+      height: {label: 'Height (px)', type: 'int'},
+      fps: {label: 'Camera FPS', type: 'int'},
+      max_hands: {label: 'Max hands', type: 'int'},
+      min_hand_confidence: {label: 'Hand confidence', type: 'float', help: '0-1'},
+      min_tracking_confidence: {label: 'Tracking confidence', type: 'float', help: '0-1'},
+      min_presence_confidence: {label: 'Presence confidence', type: 'float', help: '0-1'},
+    },
+    control: {
+      gain_x: {label: 'Gain X', type: 'float', help: 'px per hand unit'},
+      gain_y: {label: 'Gain Y', type: 'float', help: 'px per hand unit'},
+      invert_x: {label: 'Invert X (selfie mirror)', type: 'bool'},
+      invert_y: {label: 'Invert Y', type: 'bool'},
+      min_cutoff: {label: '1-Euro min cutoff', type: 'float'},
+      beta: {label: '1-Euro beta', type: 'float'},
+      d_cutoff: {label: '1-Euro d cutoff', type: 'float'},
+      pinch_threshold: {label: 'Pinch threshold', type: 'float'},
+      two_finger_pinch_threshold: {label: '2-finger pinch', type: 'float'},
+      scroll_threshold: {label: 'Scroll threshold', type: 'float'},
+      scroll_hold_ms: {label: 'Scroll hold (ms)', type: 'int'},
+      swipe_threshold_px: {label: 'Swipe threshold (px)', type: 'float'},
+      swipe_cooldown_ms: {label: 'Swipe cooldown (ms)', type: 'int'},
+      hold_frames: {label: 'Hold frames', type: 'int'},
+      lost_grace_frames: {label: 'Loss grace frames', type: 'int'},
+      preferred_hand: {label: 'Preferred hand', type: 'str'},
+      two_hand_spread_threshold: {label: 'Spread threshold', type: 'float', help: '0-1 palm distance'},
+      failsafe: {label: 'PyAutoGUI failsafe', type: 'bool'},
+    },
+  };
+
+  let config = null;
+  const inputs = {};  // key -> {el, section, field}
+
+  function makeField(section, name, spec, value) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const lab = document.createElement('label');
+    lab.textContent = spec.label;
+    if (spec.help) {
+      const h = document.createElement('span');
+      h.className = 'help';
+      h.textContent = spec.help;
+      lab.appendChild(h);
+    }
+    let el;
+    if (spec.type === 'bool') {
+      el = document.createElement('input');
+      el.type = 'checkbox';
+      el.checked = !!value;
+    } else {
+      el = document.createElement('input');
+      el.type = 'number';
+      if (spec.type === 'float') { el.step = 'any'; el.value = value; }
+      else el.value = value;
+      if (spec.type === 'str') { el.type = 'text'; el.value = value; }
+    }
+    wrap.appendChild(lab);
+    wrap.appendChild(el);
+    inputs[section + '.' + name] = {el, section, name, spec};
+    return wrap;
+  }
+
+  function buildForm() {
+    root.innerHTML = '';
+    for (const [section, fields] of Object.entries(SCHEMA)) {
+      const sec = document.createElement('section');
+      const h = document.createElement('h2');
+      h.textContent = section;
+      sec.appendChild(h);
+      const data = config[section] || {};
+      for (const [name, spec] of Object.entries(fields)) {
+        sec.appendChild(makeField(section, name, spec, data[name]));
+      }
+      root.appendChild(sec);
+    }
+  }
+
+  function collect() {
+    const out = {};
+    for (const {el, section, name, spec} of Object.values(inputs)) {
+      if (!out[section]) out[section] = {};
+      const raw = el.type === 'checkbox' ? el.checked : el.value;
+      if (spec.type === 'int') out[section][name] = parseInt(raw, 10);
+      else if (spec.type === 'float') out[section][name] = parseFloat(raw);
+      else if (spec.type === 'bool') out[section][name] = !!raw;
+      else out[section][name] = raw;
+    }
+    return out;
+  }
+
+  function drawMap(mon) {
+    mctx.clearRect(0, 0, 600, 240);
+    const rects = mon.monitors || [];
+    if (!rects.length) return;
+    const xs = rects.map(m => m[0]), ys = rects.map(m => m[1]);
+    const x2 = rects.map(m => m[0] + m[2]), y2 = rects.map(m => m[1] + m[3]);
+    const left = Math.min(...xs), top = Math.min(...ys);
+    const scale = Math.min(560 / (Math.max(...x2) - left), 200 / (Math.max(...y2) - top));
+    const ox = (600 - (Math.max(...x2) - left) * scale) / 2;
+    const oy = (240 - (Math.max(...y2) - top) * scale) / 2;
+    rects.forEach((m, i) => {
+      const x = ox + (m[0] - left) * scale, y = oy + (m[1] - top) * scale;
+      const w = Math.max(m[2] * scale, 10), h = Math.max(m[3] * scale, 10);
+      mctx.fillStyle = 'rgba(110,231,255,.15)';
+      mctx.fillRect(x, y, w, h);
+      mctx.strokeStyle = '#6ee7ff';
+      mctx.strokeRect(x, y, w, h);
+      mctx.fillStyle = '#d9fbff';
+      mctx.font = '11px Segoe UI';
+      mctx.fillText('M' + i + '  ' + m[2] + 'x' + m[3], x + 4, y + 14);
+    });
+  }
+
+  async function loadMonitors() {
+    try {
+      const res = await fetch('/api/monitors');
+      const data = await res.json();
+      drawMap(data);
+      document.getElementById('monList').textContent =
+        (data.monitors || []).map((m, i) =>
+          'M' + i + ': (' + m[0] + ', ' + m[1] + ') ' + m[2] + 'x' + m[3]).join('  ') +
+        '  |  virtual desktop: (' + (data.screen || []).join(', ') + ')';
+    } catch (e) { /* page opened standalone */ }
+  }
+
+  async function load() {
+    msg.textContent = ''; msg.className = '';
+    restart.style.display = 'none';
+    const res = await fetch('/api/config');
+    config = (await res.json()).config;
+    buildForm();
+    loadMonitors();
+  }
+
+  document.getElementById('save').onclick = async () => {
+    msg.textContent = 'Saving…';
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(collect()),
+      });
+      const data = await res.json();
+      config = data.config;
+      msg.textContent = 'Saved & applied.';
+      msg.className = 'ok';
+      if (data.restart_required && data.restart_required.length) {
+        restart.textContent = 'Restart required for: ' +
+          data.restart_required.map(n => '`' + n + '`').join(', ') +
+          ' (camera device changes take effect after the next launch).';
+        restart.style.display = 'block';
+      }
+    } catch (e) {
+      msg.textContent = 'Save failed: ' + e;
+      msg.className = 'err';
+    }
+  };
+  document.getElementById('reload').onclick = load;
+  load();
+})();
+</script>
+</body>
+</html>

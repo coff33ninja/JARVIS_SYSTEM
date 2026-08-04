@@ -26,6 +26,8 @@
   #skeleton { position: fixed; inset: 0; z-index: 0; opacity: .9; }
   #mapCanvas { background: rgba(0,0,0,.25); border: 1px solid rgba(110,231,255,.3);
                border-radius: 4px; }
+  #calib { position: fixed; right: 16px; bottom: 12px; z-index: 2; opacity: .6;
+           color: #6ee7ff; font-size: 11px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -34,6 +36,7 @@
   <div id="retX"><div class="line hl"></div><div class="line vl"></div>
     <div id="retMon"></div></div>
   <canvas id="skeleton"></canvas>
+  <a id="calib" href="http://127.0.0.1:8766/" target="_blank">calibrate</a>
 <script>
 (function () {
   const status = document.getElementById('status');
