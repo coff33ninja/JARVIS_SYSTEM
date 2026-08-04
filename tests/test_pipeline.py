@@ -59,6 +59,9 @@ class FakeMouse:
     def scroll(self, clicks):
         self.calls.append(("scroll", clicks))
 
+    def hotkey(self, *keys):
+        self.calls.append(("hotkey", keys))
+
 
 class FakeHUD:
     def __init__(self):

@@ -59,6 +59,11 @@ class ControlConfig:
     scroll_threshold: float = 0.02      # V-sign vertical delta -> scroll tick
     scroll_hold_ms: int = 150           # min time between scroll ticks
 
+    # Swipe: a fast lateral sweep of the pointing hand. Motion must accumulate
+    # in one direction past swipe_threshold_px; a direction change resets it.
+    swipe_threshold_px: float = 250.0
+    swipe_cooldown_ms: int = 600        # min time between swipe actions
+
     # Debounce: consecutive frames a gesture must hold before it fires.
     hold_frames: int = 2
 

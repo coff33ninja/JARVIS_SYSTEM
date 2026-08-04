@@ -22,11 +22,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cv2
 
 from app.config import AppConfig
+from app.control.virtual_keyboard import VirtualKeyboard
+from app.control.virtual_mouse import VirtualMouse
 from app.hud.hud_server import HUDConfig, HUDServer
 from app.perception.camera import Camera
 from app.perception.hand_tracker import HandLandmarkerTracker
 from app.perception.pipeline import ControlPipeline
-from app.control.virtual_mouse import VirtualMouse
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -60,10 +61,15 @@ def main(argv: list[str] | None = None) -> int:
         return _smoke(cfg)
 
     pipeline = build_pipeline(args, cfg)
-    stop = _StopKey()
+    keyboard = VirtualKeyboard()
+    stop = _StopKey(
+        on_mode_toggle=lambda: pipeline.modes.transition("hotkey"),
+        on_keyboard_toggle=keyboard.toggle_osk,
+    )
     logger.info("JARVIS Phase 1 running (ESC/q to quit). "
                 "Pinch = click, two-finger pinch = right click, "
-                "fist = drag, V-sign = scroll.")
+                "fist = drag, V-sign = scroll, swipe = next/prev window. "
+                "F2 = idle/control toggle, F4 = on-screen keyboard.")
     try:
         _loop(pipeline, stop)
     except KeyboardInterrupt:
@@ -89,12 +95,14 @@ def _loop(pipeline: ControlPipeline, stop: "_StopKey") -> None:
 
 
 class _StopKey:
-    """Background ESC/q listener so the loop exits cleanly (pynput)."""
+    """Background key listener: ESC/q quit, F2 mode toggle, F4 OSK."""
 
-    def __init__(self):
+    def __init__(self, on_mode_toggle=None, on_keyboard_toggle=None):
         import threading
 
         self._event = threading.Event()
+        self._on_mode_toggle = on_mode_toggle
+        self._on_keyboard_toggle = on_keyboard_toggle
         try:
             from pynput import keyboard
 
@@ -111,6 +119,10 @@ class _StopKey:
             name = str(key)
         if name in ("\x1b", "q", "Key.esc"):
             self._event.set()
+        elif name == "Key.f2" and self._on_mode_toggle:
+            self._on_mode_toggle()
+        elif name == "Key.f4" and self._on_keyboard_toggle:
+            self._on_keyboard_toggle()
 
     @property
     def triggered(self) -> bool:

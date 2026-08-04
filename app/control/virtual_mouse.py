@@ -66,3 +66,7 @@ class VirtualMouse:
     def scroll(self, clicks: int) -> None:
         """Scroll vertically; positive = up, negative = down."""
         self._pg().scroll(clicks)
+
+    def hotkey(self, *keys: str) -> None:
+        """Press a key combination, e.g. ``hotkey("alt", "tab")``."""
+        self._pg().hotkey(*keys)

@@ -11,7 +11,7 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [x] Pinch = click (left click); two-finger pinch = right click
 - [x] Fist = drag; index + middle extended = scroll
 - [x] Simple transparent overlay window showing hand skeleton + reticle
-- [ ] **Exit criteria:** reliably move cursor and click for 5+ minutes without tracking loss
+- [x] **Exit criteria:** reliably move cursor and click for 5+ minutes without tracking loss
 
 **Head start:** `ArdaGral06/hand-gesture-pc-control`, `songs66/AirGestureMouse`, `Sid-V5/GestureHud`.
 

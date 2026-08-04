@@ -89,12 +89,15 @@ class ControlPipeline:
         self._prev_pinch = False
         self._prev_two_pinch = False
         self._dragging = False
+        self._last_gesture = ""
         self._gesture_frames = 0
-        self._last_gesture: str | None = None
         self._v_sign_active = False
+        self._prev_scroll_y = 0.5
         self._scroll_accum = 0.0
         self._scroll_last = 0.0
-        self._prev_scroll_y = 0.5
+        self._prev_move_sx: int | None = None
+        self._swipe_accum = 0.0
+        self._swipe_last = 0.0
         self._window_start = time.monotonic()
         self._window_frames = 0
 
@@ -164,7 +167,8 @@ class ControlPipeline:
             return actions
 
         if gesture == "point":
-            self._move_cursor(pose.index_xy, actions)
+            sx, sy = self._move_cursor(pose.index_xy, actions)
+            self._swipe(sx, actions)
         elif gesture == "pinch":
             actions.extend(self._pinch(pose.index_xy))
         elif gesture == "two_finger_pinch":
@@ -173,6 +177,10 @@ class ControlPipeline:
             actions.extend(self._fist(pose.index_xy))
         elif gesture == "v_sign":
             self._scroll(pose, actions)
+        elif gesture == "thumbs_up":
+            actions.append(PipelineAction("confirm", gesture="thumbs_up"))
+        elif gesture == "thumbs_down":
+            actions.append(PipelineAction("cancel", gesture="thumbs_down"))
         return actions
 
     def _on_disallowed(self, gesture: str) -> None:
@@ -191,10 +199,11 @@ class ControlPipeline:
         return self._gesture_frames >= self.config.control.hold_frames
 
     def _move_cursor(self, index_xy: tuple[float, float],
-                     actions: list[PipelineAction]) -> None:
+                     actions: list[PipelineAction]) -> tuple[int, int]:
         sx, sy = self._smoothed_screen(index_xy)
         self.mouse.move(sx, sy)
         actions.append(PipelineAction("move", (sx, sy), gesture="point"))
+        return sx, sy
 
     def _smoothed_screen(self, index_xy: tuple[float, float]) -> tuple[int, int]:
         """Apply 1-Euro smoothing in screen space, then map to pixels."""
@@ -235,6 +244,36 @@ class ControlPipeline:
             self._move_cursor(index_xy, actions)
         return actions
 
+    def _swipe(self, sx: int, actions: list[PipelineAction]) -> None:
+        """Swipe detection: accumulate one-direction screen-x motion.
+
+        A fast lateral sweep of the pointing hand past ``swipe_threshold_px``
+        fires swipe_left / swipe_right (Alt+Tab window switching). A change of
+        direction resets the accumulator; a cooldown prevents double-fires.
+        """
+        cfg = self.config.control
+        now = time.monotonic()
+        if now - self._swipe_last < cfg.swipe_cooldown_ms / 1000.0:
+            return
+        if self._prev_move_sx is None:
+            self._prev_move_sx = sx
+            return
+        dx = sx - self._prev_move_sx
+        self._prev_move_sx = sx
+        if dx * self._swipe_accum < 0:  # direction flipped: start over
+            self._swipe_accum = 0.0
+        self._swipe_accum += dx
+        if abs(self._swipe_accum) < cfg.swipe_threshold_px:
+            return
+        direction = "right" if self._swipe_accum > 0 else "left"
+        self._swipe_accum = 0.0
+        self._swipe_last = now
+        if direction == "left":
+            self.mouse.hotkey("alt", "shift", "tab")  # previous window
+        else:
+            self.mouse.hotkey("alt", "tab")           # next window
+        actions.append(PipelineAction("swipe_" + direction, gesture="point"))
+
     def _scroll(self, pose, actions: list[PipelineAction]) -> None:
         """V-sign: scroll by vertical hand movement, debounced by hold time.
 
@@ -267,6 +306,8 @@ class ControlPipeline:
         self._v_sign_active = False
         self._scroll_accum = 0.0
         self._prev_scroll_y = 0.5
+        self._prev_move_sx = None
+        self._swipe_accum = 0.0
 
     # ------------------------------------------------------------------ #
     # HUD + stats

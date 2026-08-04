@@ -133,7 +133,22 @@ def open_hand():
 
 
 def fist():
+    # A real fist tucks the thumb across the palm, so the thumb reads as
+    # curled too (otherwise it would classify as thumbs_up).
+    return make_hand({"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0},
+                     thumb_tip=(0.53, 0.52, 0.0))
+
+
+def thumb_up_hand():
+    # Thumb extended above the MCP (base fixture thumb already points up),
+    # all four fingers curled.
     return make_hand({"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0})
+
+
+def thumb_down_hand():
+    # Thumb extended below the MCP (tip y > mcp y in screen space).
+    return make_hand({"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0},
+                     thumb_tip=(0.73, 0.58, 0.0))
 
 
 def v_sign():

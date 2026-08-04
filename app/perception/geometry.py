@@ -60,9 +60,15 @@ class HandPose:
     fist: bool = False
     open_palm: bool = False
     v_sign: bool = False
+    thumbs_up: bool = False
+    thumbs_down: bool = False
 
     @property
     def name(self) -> str:
+        if self.thumbs_down:
+            return "thumbs_down"
+        if self.thumbs_up:
+            return "thumbs_up"
         if self.fist:
             return "fist"
         if self.two_finger_pinch:
@@ -116,6 +122,12 @@ def finger_tip(lmks: Landmarks, name: str) -> Landmark:
     return lmks[tip]
 
 
+def thumb_extended(lmks: Landmarks) -> bool:
+    """True when the thumb tip is pushed out past its IP joint (vs. wrist)."""
+    return distance(lmks[THUMB_TIP], lmks[WRIST]) > \
+        distance(lmks[THUMB_IP], lmks[WRIST])
+
+
 def pinch_ratio(lmks: Landmarks, thumb: Landmark | None = None,
                 finger_tip: Landmark | None = None) -> float:
     """Distance between thumb tip and a fingertip, normalized by hand size."""
@@ -134,9 +146,10 @@ def point_position(lmks: Landmarks) -> tuple[float, float]:
 def classify(lmks: Landmarks, cfg: GeometryConfig | None = None) -> HandPose:
     """Classify a 21-landmark hand into a gesture-usable HandPose.
 
-    Gesture precedence (first match wins): fist > pinch > two-finger-pinch >
-    open-palm > V-sign > point. This ordering keeps an open palm from being
-    mistaken for a point, and a pinch from double-firing while moving.
+    Gesture precedence (first match wins): thumbs-down > thumbs-up > fist >
+    pinch > two-finger-pinch > open-palm > V-sign > point. This ordering keeps
+    a fist with an extended thumb from being read as a drag, and an open palm
+    from being mistaken for a point.
     """
     cfg = cfg or GeometryConfig()
     index_ext = finger_extended(lmks, "index")
@@ -150,13 +163,21 @@ def classify(lmks: Landmarks, cfg: GeometryConfig | None = None) -> HandPose:
     two_pinch_ratio = pinch_ratio(lmks, lmks[THUMB_TIP], mid)
 
     any_ext = index_ext or middle_ext or ring_ext or pinky_ext
+    thumb_ext = thumb_extended(lmks)
+
+    # Thumbs up/down: thumb extended, all four fingers curled. Orientation is
+    # read on the thumb's own vertical axis (tip above/below the MCP).
+    thumbs_up = thumb_ext and not any_ext and lmks[THUMB_TIP][1] < lmks[THUMB_MCP][1]
+    thumbs_down = thumb_ext and not any_ext and lmks[THUMB_TIP][1] > lmks[THUMB_MCP][1]
 
     return HandPose(
         index_xy=point_position(lmks),
         index_extended=index_ext,
         pinch=pinch_ratio_ < cfg.pinch_threshold and index_ext,
         two_finger_pinch=two_pinch_ratio < cfg.two_finger_pinch_threshold,
-        fist=not any_ext,
+        fist=not any_ext and not thumbs_up and not thumbs_down,
         open_palm=index_ext and middle_ext and ring_ext and pinky_ext,
         v_sign=index_ext and middle_ext and not ring_ext and not pinky_ext,
+        thumbs_up=thumbs_up,
+        thumbs_down=thumbs_down,
     )

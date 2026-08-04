@@ -39,17 +39,17 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.PRESENTATION, PRESENT_GESTURE): Mode.CONTROL,
 }
 
-# Every gesture available in Phase 1.
+# Every gesture the system can classify.
 GESTURES = {
     "point", "pinch", "two_finger_pinch", "fist",
-    "v_sign", "open_palm", "none",
+    "v_sign", "open_palm", "thumbs_up", "thumbs_down", "none",
 }
 
 # Which gestures act per mode. "none" is always inert.
 _ACTIVE: dict[Mode, set[str]] = {
     Mode.IDLE: set(),
     Mode.CONTROL: {"point", "pinch", "two_finger_pinch", "fist", "v_sign"},
-    Mode.CHAT: {"open_palm", "point"},
+    Mode.CHAT: {"open_palm", "point", "thumbs_up", "thumbs_down"},
     Mode.TRANSFER: {"open_palm"},
     Mode.PRESENTATION: {"point", "v_sign"},
 }

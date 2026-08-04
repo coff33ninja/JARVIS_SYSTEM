@@ -17,7 +17,17 @@ from app.perception.geometry import (
     pinch_ratio,
     point_position,
 )
-from conftest import fist, make_hand, open_hand, pinch_hand, point_hand, two_pinch_hand, v_sign
+from conftest import (
+    fist,
+    make_hand,
+    open_hand,
+    pinch_hand,
+    point_hand,
+    thumb_down_hand,
+    thumb_up_hand,
+    two_pinch_hand,
+    v_sign,
+)
 
 
 def test_hand_size_positive():
@@ -54,10 +64,28 @@ def test_pinch_ratio_pinch_is_small():
         (point_hand, "point"),
         (pinch_hand, "pinch"),
         (two_pinch_hand, "two_finger_pinch"),
+        (thumb_up_hand, "thumbs_up"),
+        (thumb_down_hand, "thumbs_down"),
     ],
 )
 def test_classify_named_gestures(hand, expected):
     assert classify(hand()).name == expected
+
+
+def test_thumbs_take_precedence_over_fist():
+    # A curled hand with the thumb up/down must read as a thumb gesture, not a
+    # drag fist — but a fully tucked thumb stays a fist.
+    up, down = classify(thumb_up_hand()), classify(thumb_down_hand())
+    assert up.thumbs_up and not up.fist
+    assert down.thumbs_down and not down.fist
+    assert classify(fist()).fist
+    assert not classify(fist()).thumbs_up
+    assert not classify(fist()).thumbs_down
+
+
+def test_thumbs_require_fingers_curled():
+    assert not classify(open_hand()).thumbs_up
+    assert not classify(open_hand()).thumbs_down
 
 
 def test_classify_pinch_precedence_over_point():
