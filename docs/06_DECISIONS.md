@@ -63,6 +63,14 @@ Architecture Decision Records. Each entry records a decision made during plannin
 - **Decision:** Use uv as the sole package/venv/Python manager. `pyproject.toml` holds dependencies; `uv.lock` pins the tree; `[tool.uv]` sets `cache-dir = "D:/uv-cache"`, `managed = true`, `python-preference = "managed"` so uv installs its own CPython and caches entirely off C: (bypassing system cache/install restrictions). All pip usage banned; project script `scripts/ensure-uv.ps1` bootstraps uv where missing.
 - **Consequences:** Requires uv installed (one-line bootstrap); `UV_PYTHON_INSTALL_DIR` must be set as an env var (not a pyproject key) if managed Pythons should also leave C:. Faster, reproducible, no global pollution.
 
+## ADR-009: SQLite-backed hybrid recall memory for the agent
+
+- **Status:** Accepted
+- **Context:** The Phase 3 agent needs persistent long-term memory (facts, user preferences, entities) plus conversation history so Jarvis can recall context across sessions. No memory subsystem was specified in the planning docs.
+- **Options:** (a) A purpose-built vector database (ChromaDB / LanceDB / FAISS) — best semantic recall, but a heavy dependency and external service; (b) in-memory only — trivially simple but loses everything on restart; (c) SQLite + FTS5 with optional Ollama embeddings — zero new dependencies, local-first, graceful degradation to keyword recall when embeddings are unavailable.
+- **Decision:** SQLite-backed store in `app/agent/recall/` with an FTS5 keyword index as the always-on recall path, plus an optional semantic layer that embeds rows through Ollama's OpenAI-compatible embeddings endpoint (the `openai` client is already a dependency). The retriever fuses keyword and semantic scores with configurable weights; if the embedder is down or disabled, recall degrades to keyword-only (ADR-005, graceful degradation).
+- **Consequences:** Keyword recall always works with no external services. Semantic recall requires Ollama running with an embedding model pulled, and currently scans stored vectors linearly (acceptable at MVP scale; swap in a real vector index in Phase 6 if it grows). All content stays on disk locally, consistent with ADR-005.
+
 ## Open Questions / Deferred Decisions
 
 - **Q-01:** Whether the tablet runs its own gesture detector or is a "ready to receive" peer only. Deferred to Phase 4.

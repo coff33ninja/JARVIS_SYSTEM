@@ -27,6 +27,10 @@ dev = [
     "pytest>=8.0",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [tool.uv]
 # This is an application, not a distributable package.
 package = false
