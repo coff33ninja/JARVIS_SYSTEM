@@ -61,7 +61,8 @@ jarvis-system/
 │   │   ├── stt.py            # Faster-Whisper
 │   │   ├── tts.py            # Piper / Coqui
 │   │   ├── tools/            # mouse, keyboard, apps, search, transfer, screen
-│   │   └── context.py        # focused window, gestures, devices
+│   │   ├── recall/           # long-term memory: store, retriever, embedder (see 15_RECALL_MEMORY.md)
+│   │   └── context.py        # focused window, gestures, devices + history/memories → prompt
 │   ├── transfer/
 │   │   ├── localsend_bridge.py  # trigger LocalSend push/pull
 │   │   ├── discovery.py      # mDNS / device discovery

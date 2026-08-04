@@ -16,6 +16,10 @@ Prioritized list. **P0 = MVP** (must ship before calling the project "usable"), 
 ## P1 — Intelligence & Transfer (Phase 3–4)
 
 - [ ] Local LLM agent (Ollama) with tool calling
+- [ ] Long-term memory store: facts + conversation history (SQLite + FTS5)
+- [ ] Hybrid recall (keyword + semantic) with graceful degradation
+- [ ] Semantic index backfill via Ollama embeddings (`recaller.index()`)
+- [ ] Agent context builder: history + memories → prompt
 - [ ] Voice input (Faster-Whisper) + TTS (Piper/Coqui)
 - [ ] Agent tools: open apps, switch windows, web search, media control
 - [ ] Focused-window context awareness

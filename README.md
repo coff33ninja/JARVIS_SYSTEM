@@ -45,6 +45,7 @@ A system that:
 | [docs/12_VOICE.md](docs/12_VOICE.md) | Voice subsystem spec (wake word, STT, TTS, grammar) |
 | [docs/13_MULTIMONITOR.md](docs/13_MULTIMONITOR.md) | Multi-monitor zone math + mixed-DPI handling |
 | [docs/14_STARTER_COMBO.md](docs/14_STARTER_COMBO.md) | Which existing repos to borrow vs. build from scratch |
+| [docs/15_RECALL_MEMORY.md](docs/15_RECALL_MEMORY.md) | Agent long-term memory: SQLite + FTS5 + optional Ollama embeddings, context builder |
 
 ## Provenance
 

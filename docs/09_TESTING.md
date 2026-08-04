@@ -34,6 +34,15 @@ Test pyramid adapted to a real-time gesture + agent system. Default tool: pytest
 - Latency gate in CI: fail if p95 exceeds the budget.
 - Long-run soak: 1 h at 30 FPS, assert no memory growth > 10% and no frame drops after warmup.
 
+## 4.5 Recall memory tests (Phase 3)
+
+- `tests/test_recall_store.py` — persistence, FTS + LIKE fallback, updates/deletes, embeddings round-trip.
+- `tests/test_recall_retriever.py` — keyword/semantic/hybrid ranking, graceful degradation when the embedder dies, index backfill.
+- `tests/test_embedder.py` — client build/availability, single + batch embed, endpoint-down handling.
+- `tests/test_context.py` — `build_context` composition and prompt formatting.
+
+All run without a webcam, network, or Ollama (fake embedders, tmp SQLite). End-to-end check: `uv run python scripts/recall_smoke.py`.
+
 ## 5. Regression playbook
 
 1. Reproduce the bug with a captured frame or recorded gesture (replay harness in `scripts/replay_frames.py`).

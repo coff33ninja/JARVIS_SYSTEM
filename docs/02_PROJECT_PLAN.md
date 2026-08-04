@@ -39,6 +39,9 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [ ] Voice output: Piper / Coqui TTS (JARVIS voice)
 - [ ] Simple tool-using agent: open apps, switch windows, web search
 - [ ] Context awareness: current focused window, recent gestures, connected devices
+- [ ] Long-term recall memory: SQLite + FTS5 facts/episodes store (`app/agent/recall/`, see 15_RECALL_MEMORY.md)
+- [ ] Semantic recall via Ollama embeddings (optional; keyword fallback when offline)
+- [ ] Context builder: compose recent history + recalled memories into LLM prompts (`app/agent/context.py`)
 - [ ] Overlay chat bubbles / transcript panel
 - [ ] **Exit criteria:** say "Jarvis, open the project folder" and it opens; voice round-trip < 2 s
 
