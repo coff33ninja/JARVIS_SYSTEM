@@ -242,3 +242,16 @@ def test_default_mapper_built_from_control_config():
     assert pipe.mapper.config.gain_x == 5.0
     assert pipe.mapper.config.invert_x is True
     cam.assert_called_once_with(0, 640, 480)
+
+
+def test_default_virtual_mouse_reads_control_config():
+    from unittest.mock import patch
+
+    cfg = AppConfig()
+    cfg.control.failsafe = False
+    with patch("app.perception.pipeline.VirtualMouse") as vm, \
+            patch("app.perception.pipeline.Camera") as cam, \
+            patch("app.perception.pipeline.HandLandmarkerTracker") as tracker:
+        ControlPipeline(config=cfg, hud=FakeHUD(),
+                        frame_source=lambda: (True, FRAME))
+    vm.assert_called_once_with(failsafe=False)

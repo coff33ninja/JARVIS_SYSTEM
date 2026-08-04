@@ -121,6 +121,11 @@ class HUDServer:
             return Response(200, "OK",
                             Headers({"Content-Type": "text/html; charset=utf-8"}),
                             body)
+        if not is_upgrade:  # plain GET to any other path (e.g. favicon)
+            from websockets.asyncio.server import Response
+            from websockets.datastructures import Headers
+
+            return Response(404, "Not Found", Headers({}), b"")
         return None
 
     async def _handler(self, websocket) -> None:  # pragma: no cover - threaded

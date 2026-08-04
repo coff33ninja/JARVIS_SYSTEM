@@ -76,7 +76,8 @@ class ControlPipeline:
             min_hand_confidence=self.config.perception.min_hand_confidence,
             min_tracking_confidence=self.config.perception.min_tracking_confidence,
         )
-        self.mouse = mouse or VirtualMouse()
+        self.mouse = mouse or VirtualMouse(
+            failsafe=self.config.control.failsafe)
         self.mapper = mapper or CursorMapper(
             config=MappingConfig.from_control(self.config.control))
         self.hud = hud
@@ -299,7 +300,10 @@ class ControlPipeline:
 
     def close(self) -> None:
         if self._dragging:
-            self.mouse.drag_end()
+            try:
+                self.mouse.drag_end()
+            except Exception:  # pragma: no cover - OS input layer
+                logger.warning("drag_end failed during shutdown", exc_info=True)
             self._dragging = False
         self.tracker.close()
         self.camera.release()

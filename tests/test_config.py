@@ -13,6 +13,7 @@ def test_defaults_are_sane():
     assert cfg.perception.width == 640
     assert cfg.control.min_cutoff == 1.0
     assert cfg.control.beta == 0.007
+    assert cfg.control.failsafe is False
     assert cfg.hud.port == 8765
 
 

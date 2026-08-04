@@ -62,6 +62,10 @@ class ControlConfig:
     # Debounce: consecutive frames a gesture must hold before it fires.
     hold_frames: int = 2
 
+    # PyAutoGUI corner fail-safe. Off for gesture control: corners are
+    # legitimate cursor targets and the loop has its own abort (ESC/q).
+    failsafe: bool = False
+
     # Screen mapping target (virtual desktop origin/size). Auto-detected
     # from pyautogui at runtime unless explicitly overridden.
     screen_x: int | None = None
