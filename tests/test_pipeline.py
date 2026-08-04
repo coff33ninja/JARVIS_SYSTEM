@@ -336,6 +336,21 @@ def test_hud_emits_reticle_on_point():
     assert 0 <= x <= 1000 and 0 <= y <= 800
 
 
+def test_status_reports_gesture_and_clears_on_loss():
+    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe.step(FRAME)
+    statuses = [e for e in hud.events if e["type"] == "status"]
+    assert statuses and statuses[-1]["gesture"] == "point"
+    # Sustained hand loss clears the shown gesture (and the status throttle
+    # would normally gate re-emission; force it here to check the value).
+    tracker.result = HandTrackingResult()
+    for _ in range(pipe.config.control.lost_grace_frames + 2):
+        pipe._last_status_ts = 0.0
+        pipe.step(FRAME)
+    statuses = [e for e in hud.events if e["type"] == "status"]
+    assert statuses[-1]["gesture"] == ""
+
+
 def test_disallowed_gesture_in_mode_is_inert():
     # CHAT mode does not allow pinch -> no click, no crash.
     pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()), mode=Mode.CHAT)

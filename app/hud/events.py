@@ -39,16 +39,18 @@ class ReticleEvent:
 
 @dataclass
 class StatusEvent:
-    """Pipeline health: mode, fps, detection flag."""
+    """Pipeline health: mode, fps, detection flag, last gesture."""
 
     mode: str = "idle"
     fps: float = 0.0
     detected: bool = False
+    gesture: str = ""
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
         return {"type": "status", "mode": self.mode, "fps": self.fps,
-                "detected": self.detected, "ts": self.ts}
+                "detected": self.detected, "gesture": self.gesture,
+                "ts": self.ts}
 
 
 @dataclass

@@ -30,11 +30,13 @@ def test_reticle_event_schema():
 
 
 def test_status_event_schema():
-    d = StatusEvent(mode="control", fps=29.5, detected=True).to_dict()
+    d = StatusEvent(mode="control", fps=29.5, detected=True, gesture="point").to_dict()
     assert d["type"] == "status"
     assert d["mode"] == "control"
     assert d["fps"] == 29.5
     assert d["detected"] is True
+    assert d["gesture"] == "point"
+    assert json.dumps(d)
 
 
 def test_encode_normalises_all_event_types():

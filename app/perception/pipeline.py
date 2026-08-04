@@ -106,6 +106,7 @@ class ControlPipeline:
         self._lost_frames = 0
         self._last_skeleton_ts = 0.0
         self._last_status_ts = 0.0
+        self._status_gesture = ""
 
     # ------------------------------------------------------------------ #
     # main loop
@@ -323,6 +324,7 @@ class ControlPipeline:
 
     def _on_hand_lost(self) -> None:
         self._smoothing = None
+        self._status_gesture = ""
         self._prev_pinch = False
         self._prev_two_pinch = False
         self._prev_thumbs_up = False
@@ -343,6 +345,8 @@ class ControlPipeline:
         if self.hud is None:
             return
         now = time.monotonic()
+        if pose is not None:
+            self._status_gesture = pose.name
         if not self._monitors_sent:
             self.hud.broadcast(MonitorsEvent(monitors=self.mapper.monitors))
             self._monitors_sent = True
@@ -365,6 +369,7 @@ class ControlPipeline:
             mode=self.modes.mode.value,
             fps=self.stats.last_fps,
             detected=self.stats.hands_seen >= self.stats.frames - 1,
+            gesture=self._status_gesture,
         ))
 
     def _tick_fps(self) -> None:
