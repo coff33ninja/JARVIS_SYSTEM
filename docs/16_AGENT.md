@@ -67,12 +67,18 @@ Windows tools are Win32-based and return a descriptive error string when unavail
 
 ## Tests
 
-`tests/test_llm.py` (response normalisation, tool-call parsing, availability), `tests/test_tools.py` (registry, memory tools, browser/explorer/launch stubbed), `tests/test_agent.py` (episode recording, memory injection, tool flow, iteration bounds, tool-refusal degradation). All offline: fake clients, stubbed subprocess/browser, tmp SQLite.
+`tests/test_llm.py` (response normalisation, tool-call parsing, availability), `tests/test_tools.py` (registry, memory tools, browser/explorer/launch stubbed), `tests/test_agent.py` (episode recording, memory injection, tool flow, iteration bounds, tool-refusal degradation), `tests/test_stt.py` (segment joining, lazy model load, graceful failure), `tests/test_tts.py` (SAPI speak/voice selection, Piper subprocess), `tests/test_audio.py` (silence detection, max caps), `tests/test_voice.py` (wake-word gating, stripping, push-to-talk, transcript). All offline: fake clients, stubbed subprocess/browser, tmp SQLite.
 
-## Remaining Phase 3 items (voice iteration)
+## Voice pipeline (Phase 3, built)
 
-- `app/agent/stt.py` — Faster-Whisper input (models per `08_ASSETS.md`)
-- `app/agent/tts.py` — Piper / Coqui output
-- HUD chat bubbles / transcript panel (HUD layer)
+- `app/agent/stt.py` — `STTEngine` wrapping Faster-Whisper. Lazy model load (auto-downloads on first use, sizes in `08_ASSETS.md`); `transcribe(audio)` and `transcribe_file(path)`; graceful `available` probe.
+- `app/agent/tts.py` — `TTSEngine`. **SAPI default** (Windows `SpVoice`, zero downloads; voice picked by substring, optional pitch via SAPI XML) and optional **Piper** backend (`en_US-amy-medium` via `JARVIS_PIPER_BINARY`/`JARVIS_PIPER_MODEL`). `say()` never raises.
+- `app/agent/audio.py` — `MicInput`: block-wise 16 kHz float32 capture with RMS end-of-speech detection (`record_until_silence`), hard max caps.
+- `app/agent/voice.py` — `VoiceLoop` composition: one utterance → transcribe once → keyword mode gates on the wake word ("jarvis", stripped from the command) → `Agent.handle_turn` → `TTSEngine.say`. `run()` loops in its own thread so the gesture loop is never blocked. Transcript available via `Agent.transcript()`.
+- Config via env: `JARVIS_STT_MODEL`, `JARVIS_STT_LANGUAGE`, `JARVIS_TTS_BACKEND`, `JARVIS_TTS_VOICE`, `JARVIS_PIPER_BINARY`, `JARVIS_PIPER_MODEL`, `JARVIS_WAKE_WORD`, `JARVIS_WAKE_MODE`, `JARVIS_MIC_RATE`.
 
-Exit criteria once wired: "Jarvis, open the project folder" works with voice, round-trip < 2 s.
+### HUD transcript panel
+
+The data layer is done (`Agent.transcript()` returns recent user/assistant episodes; `VoiceLoop.run_once` returns them with each turn). The on-screen chat bubbles/panel render with the HUD overlay layer (Phase 1/2).
+
+Exit criteria once wired: "Jarvis, open the project folder" works with voice, round-trip < 2 s. This needs a **tool-capable LLM** (e.g. `ollama pull llama3.2`, `smallthinker` has no tools), the STT model downloaded, and a live mic.

@@ -58,8 +58,10 @@ jarvis-system/
 │   │   └── events.py         # JSON events to HUD (skeleton, reticle, status)
 │   ├── agent/
 │   │   ├── llm.py            # OpenAI-compatible client (Ollama/LM Studio)
-│   │   ├── stt.py            # Faster-Whisper
-│   │   ├── tts.py            # Piper / Coqui
+│   │   ├── stt.py            # Faster-Whisper (STTEngine)
+│   │   ├── tts.py            # SAPI default / Piper (TTSEngine)
+│   │   ├── audio.py          # mic capture + end-of-speech (MicInput)
+│   │   ├── voice.py          # wake word → STT → agent → TTS (VoiceLoop)
 │   │   ├── tools/            # mouse, keyboard, apps, search, transfer, screen
 │   │   ├── recall/           # long-term memory: store, retriever, embedder (see 15_RECALL_MEMORY.md)
 │   │   └── context.py        # focused window, gestures, devices + history/memories → prompt
