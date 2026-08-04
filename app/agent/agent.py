@@ -101,6 +101,14 @@ class Agent:
         self.store.add_episode(Episode("assistant", final, sid))
         return final
 
+    def transcript(self, session_id: str | None = None, limit: int = 20) -> list[dict]:
+        """Recent user/assistant episodes for HUD chat bubbles / transcript."""
+        episodes = self.recaller.recall_history(
+            session_id=session_id or self.session_id, limit=limit * 2
+        )
+        turns = [ep for ep in episodes if ep["role"] in ("user", "assistant")]
+        return turns[-limit:]
+
     def _chat(self, messages: list[dict], schemas: list[dict]) -> dict:
         """Call the LLM, downgrading to tool-less chat if the model rejects tools.
 
