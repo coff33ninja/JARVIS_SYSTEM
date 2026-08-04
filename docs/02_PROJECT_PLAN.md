@@ -20,10 +20,12 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 **Goal:** A usable, low-latency control layer that doesn't fight the user.
 
 - [ ] Full gesture set (see gesture vocabulary doc)
+- [x] Thumbs up/down: confirm / reject in Chat
+- [x] Swipe (lateral point sweep): Alt+Tab next/prev window in Control
+- [x] On-screen virtual keyboard toggle (F4 -> Windows osk.exe)
 - [ ] Multi-monitor awareness: cursor maps to correct screen; "point at a screen zone"
 - [ ] Mode system: Idle / Control / Chat / Transfer / Presentation
 - [ ] Gesture confidence thresholds + debounce (avoid accidental triggers)
-- [ ] On-screen virtual keyboard toggle
 - [ ] Media & volume control (play/pause, next, mute)
 - [ ] Calibration UI: camera position, sensitivity, per-monitor layout
 - [ ] **Exit criteria:** < 80 ms gesture→action latency; zero misfires in a 10-minute session

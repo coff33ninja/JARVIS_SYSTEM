@@ -91,7 +91,7 @@ def test_none_never_allowed():
 
 def test_all_gestures_known():
     assert {"point", "pinch", "two_finger_pinch", "fist", "v_sign",
-            "open_palm", "none"} == GESTURES
+            "open_palm", "thumbs_up", "thumbs_down", "none"} == GESTURES
 
 
 def test_known_gestures_subset_of_mode_table():

@@ -62,12 +62,14 @@ This project was scaffolded from a research conversation originally produced in 
 
 ## Getting Started
 
-Phase 1 (hand tracking → virtual mouse → overlay) is implemented. Set up per `docs/07_SETUP.md`, then:
+Phase 1 (hand tracking → virtual mouse → overlay) is implemented. Phase 2 additions (thumbs up/down in Chat, Alt+Tab swipe, on-screen keyboard toggle) are in place and tested. Set up per `docs/07_SETUP.md`, then:
 
 ```sh
 uv run python scripts/smoke_test_hands.py     # verify webcam + MediaPipe hand tracking
 uv run python scripts/jarvis_control.py       # run the Phase 1 control loop (--no-hud to disable overlay)
-uv run pytest -q                               # 198 tests
+uv run pytest -q                               # 220 tests
 ```
 
-Phase 2+ (see `docs/02_PROJECT_PLAN.md`): full gesture set, multi-monitor mapping, mode system.
+Controls: pinch = click, two-finger pinch = right click, fist = drag, V-sign = scroll, swipe = next/prev window, F2 = idle/control toggle, F4 = on-screen keyboard.
+
+Phase 2+ (see `docs/02_PROJECT_PLAN.md`): remaining full gesture set, multi-monitor mapping, mode system refinements.

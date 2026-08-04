@@ -12,8 +12,8 @@ Reference spec for gesture → action mapping. Hand landmarks use MediaPipe's 21
 | Fist | All fingers curled | Drag (hold = drag, release = drop) | Control |
 | Open Palm | All fingers extended | Release / drop / cancel; "catch" in Transfer | Control, Transfer |
 | V-Sign | Index + middle extended | Scroll up / down (finger tilt) | Control |
-| Thumbs up | Thumb up | Accept / confirm | Control, Chat |
-| Thumbs down | Thumb down | Reject / cancel | Control, Chat |
+| Thumbs up | Thumb up, fingers curled | Accept / confirm | Chat |
+| Thumbs down | Thumb down, fingers curled | Reject / cancel | Chat |
 | Swipe (left/right) | Hand sweeps sideways | Alt+Tab / switch window / next track | Control |
 | Two-hand pinch apart | Both hands spread | Zoom / launch transfer-ready mode | Control, Transfer |
 | Grab (fist held still) | Fist, stationary 500 ms | Pick up selected content | Transfer |
@@ -33,6 +33,16 @@ Reference spec for gesture → action mapping. Hand landmarks use MediaPipe's 21
 | Presentation | Point, swipe, V-sign | Slides/scroll/navigation |
 
 Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice command ("Jarvis, transfer mode"), or hotkey override.
+
+## Implemented Hotkeys
+
+| Key | Action |
+|---|---|
+| ESC / q | Quit the control loop |
+| F2 | Toggle Idle ↔ Control mode |
+| F4 | Toggle the on-screen keyboard (Windows `osk.exe`) |
+
+Swipe (in Control) fires `Alt+Tab` (swipe right) / `Alt+Shift+Tab` (swipe left) via a configurable threshold (`control.swipe_threshold_px`, default 250 px of accumulated screen motion).
 
 ## Detection Requirements
 

@@ -74,6 +74,18 @@ class FakeHUD:
 FRAME = np.zeros((480, 640, 3), dtype=np.uint8)
 
 
+def patch_time(module, now):
+    """Monkeypatch module.time.monotonic to return a fixed value."""
+    from unittest.mock import patch
+
+    class _FakeTime:
+        @staticmethod
+        def monotonic():
+            return now
+
+    return patch.object(module, "time", _FakeTime)
+
+
 def make_pipeline(result=None, mode=Mode.CONTROL, config=None):
     cfg = config or AppConfig()
     tracker = FakeTracker(result)
@@ -166,6 +178,145 @@ def test_no_hand_emits_no_actions():
     pipe, mouse, hud, _ = make_pipeline(HandTrackingResult())
     assert pipe.step(FRAME) == []
     assert mouse.calls == []
+
+
+def test_swipe_right_hotkeys_alt_tab():
+    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    for _ in range(2):  # let smoothing warm up
+        pipe.step(FRAME)
+    tracker.result = None  # freeze pose; inject motion via _prev_move_sx
+    # Simulate a fast lateral sweep in screen space.
+    pipe._prev_move_sx = 400
+    pipe._swipe_accum = 0.0
+    pipe._swipe_last = 0.0
+    pipe._swipe(900, [])  # 500px right past 250px threshold
+    assert ("hotkey", ("alt", "tab")) in mouse.calls
+
+
+def test_swipe_left_hotkeys_alt_shift_tab():
+    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe._prev_move_sx = 900
+    pipe._swipe_accum = 0.0
+    pipe._swipe_last = 0.0
+    pipe._swipe(200, [])
+    assert ("hotkey", ("alt", "shift", "tab")) in mouse.calls
+
+
+def test_swipe_direction_change_resets_accumulator():
+    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe._prev_move_sx = 400
+    pipe._swipe_accum = 200.0  # built up rightward
+    pipe._swipe_last = 0.0
+    pipe._swipe(300, [])  # reverse: should reset, not fire
+    assert all(c[0] != "hotkey" for c in mouse.calls)
+
+
+def test_swipe_cooldown_prevents_double_fire():
+    import app.perception.pipeline as pipeline_mod
+
+    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    now = 1000.0
+    pipe._prev_move_sx = 400
+    pipe._swipe_accum = 250.0
+    pipe._swipe_last = 0.0
+    with patch_time(pipeline_mod, 1000.0):
+        pipe._swipe(900, [])
+    assert ("hotkey", ("alt", "tab")) in mouse.calls
+    # Immediately fire again within cooldown -> suppressed.
+    pipe._prev_move_sx = 400
+    pipe._swipe_accum = 250.0
+    with patch_time(pipeline_mod, 1000.1):
+        pipe._swipe(900, [])
+    assert len([c for c in mouse.calls if c[0] == "hotkey"]) == 1
+
+
+def test_thumbs_up_in_chat_emits_confirm():
+    from unittest.mock import patch
+
+    from conftest import thumb_up_hand
+
+    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
+    for _ in range(1):  # one warm-up frame, confirm fires on frame 2
+        pipe.step(FRAME)
+    with patch("app.perception.pipeline.time.monotonic",
+               return_value=1000.0):
+        actions = pipe.step(FRAME)
+    assert any(a.name == "confirm" for a in actions)
+
+
+def test_thumbs_up_confirm_is_edge_triggered():
+    """Confirm fires once on gesture start, not every frame while held."""
+    from unittest.mock import patch
+
+    from conftest import thumb_up_hand
+
+    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
+    for _ in range(1):  # confirm fires on the next (second) frame
+        pipe.step(FRAME)
+    with patch("app.perception.pipeline.time.monotonic",
+               return_value=1000.0):
+        first = pipe.step(FRAME)
+    assert len([a for a in first if a.name == "confirm"]) == 1
+    # Holding the thumbs-up must not re-fire.
+    with patch("app.perception.pipeline.time.monotonic",
+               return_value=1001.0):
+        held = pipe.step(FRAME)
+    assert all(a.name != "confirm" for a in held)
+
+
+def test_thumbs_up_rearms_after_other_gesture():
+    """Leaving the thumbs-up and returning re-arms the confirm trigger."""
+    from unittest.mock import patch
+
+    from conftest import thumb_up_hand, point_hand
+
+    pipe, mouse, hud, tracker = make_pipeline(
+        hands(thumb_up_hand()), mode=Mode.CHAT)
+    for _ in range(1):
+        pipe.step(FRAME)
+    with patch("app.perception.pipeline.time.monotonic",
+               return_value=1000.0):
+        assert any(a.name == "confirm" for a in pipe.step(FRAME))
+    # Switch to point (allowed in CHAT) then back to thumbs-up.
+    tracker.result = hands(point_hand())
+    for _ in range(2):
+        pipe.step(FRAME)
+    tracker.result = hands(thumb_up_hand())
+    for _ in range(1):
+        pipe.step(FRAME)
+    with patch("app.perception.pipeline.time.monotonic",
+               return_value=2000.0):
+        again = pipe.step(FRAME)
+    assert any(a.name == "confirm" for a in again)
+
+
+def test_thumbs_down_in_chat_emits_cancel():
+    from conftest import thumb_down_hand
+
+    pipe, mouse, hud, _ = make_pipeline(hands(thumb_down_hand()), mode=Mode.CHAT)
+    for _ in range(1):  # one warm-up frame, cancel fires on frame 2
+        pipe.step(FRAME)
+    actions = pipe.step(FRAME)
+    assert any(a.name == "cancel" for a in actions)
+
+
+def test_thumbs_do_not_drag_in_control():
+    from conftest import thumb_up_hand
+
+    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CONTROL)
+    for _ in range(2):
+        pipe.step(FRAME)
+    assert all(c[0] != "drag_start" for c in mouse.calls)
+
+
+def test_pinch_in_chat_is_inert_but_thumbs_still_fire():
+    from conftest import thumb_up_hand
+
+    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
+    for _ in range(1):
+        pipe.step(FRAME)
+    actions = pipe.step(FRAME)
+    assert any(a.name == "confirm" for a in actions)
 
 
 def test_hud_emits_skeleton_and_status():

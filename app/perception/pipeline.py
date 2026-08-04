@@ -88,6 +88,8 @@ class ControlPipeline:
         self._smoothing = None  # built lazily to keep imports light
         self._prev_pinch = False
         self._prev_two_pinch = False
+        self._prev_thumbs_up = False
+        self._prev_thumbs_down = False
         self._dragging = False
         self._last_gesture = ""
         self._gesture_frames = 0
@@ -154,6 +156,11 @@ class ControlPipeline:
             return actions
         if gesture != "v_sign":
             self._v_sign_active = False
+        # Edge-trigger the thumb gestures: arm them only while off.
+        if gesture != "thumbs_up":
+            self._prev_thumbs_up = False
+        if gesture != "thumbs_down":
+            self._prev_thumbs_down = False
 
         # Leaving "fist" releases an active drag (fist = hold, release = drop).
         if self._dragging and gesture != "fist":
@@ -178,9 +185,13 @@ class ControlPipeline:
         elif gesture == "v_sign":
             self._scroll(pose, actions)
         elif gesture == "thumbs_up":
-            actions.append(PipelineAction("confirm", gesture="thumbs_up"))
+            if not self._prev_thumbs_up:
+                actions.append(PipelineAction("confirm", gesture="thumbs_up"))
+            self._prev_thumbs_up = True
         elif gesture == "thumbs_down":
-            actions.append(PipelineAction("cancel", gesture="thumbs_down"))
+            if not self._prev_thumbs_down:
+                actions.append(PipelineAction("cancel", gesture="thumbs_down"))
+            self._prev_thumbs_down = True
         return actions
 
     def _on_disallowed(self, gesture: str) -> None:
@@ -189,6 +200,10 @@ class ControlPipeline:
         self._gesture_frames = 0
         if gesture != "v_sign":
             self._v_sign_active = False
+        if gesture != "thumbs_up":
+            self._prev_thumbs_up = False
+        if gesture != "thumbs_down":
+            self._prev_thumbs_down = False
 
     def _hold_stable(self, gesture: str) -> bool:
         if gesture == self._last_gesture:
@@ -253,13 +268,13 @@ class ControlPipeline:
         """
         cfg = self.config.control
         now = time.monotonic()
-        if now - self._swipe_last < cfg.swipe_cooldown_ms / 1000.0:
-            return
         if self._prev_move_sx is None:
             self._prev_move_sx = sx
             return
         dx = sx - self._prev_move_sx
         self._prev_move_sx = sx
+        if now - self._swipe_last < cfg.swipe_cooldown_ms / 1000.0:
+            return
         if dx * self._swipe_accum < 0:  # direction flipped: start over
             self._swipe_accum = 0.0
         self._swipe_accum += dx
@@ -301,6 +316,8 @@ class ControlPipeline:
         self._smoothing = None
         self._prev_pinch = False
         self._prev_two_pinch = False
+        self._prev_thumbs_up = False
+        self._prev_thumbs_down = False
         self._last_gesture = None
         self._gesture_frames = 0
         self._v_sign_active = False

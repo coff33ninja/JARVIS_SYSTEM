@@ -48,6 +48,13 @@ def test_scroll():
     v._gui.scroll.assert_called_once_with(-3)
 
 
+def test_hotkey():
+    v = VirtualMouse()
+    v._gui = Mock()
+    v.hotkey("alt", "tab")
+    v._gui.hotkey.assert_called_once_with("alt", "tab")
+
+
 def test_position():
     v = VirtualMouse()
     v._gui = Mock()
