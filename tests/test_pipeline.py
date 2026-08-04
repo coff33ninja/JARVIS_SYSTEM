@@ -102,6 +102,21 @@ def hands(hand):
     return HandTrackingResult(hands=[hand], handedness=["Right"])
 
 
+def _shift(lm, dx, dy):
+    return [(x + dx, y + dy, z) for x, y, z in lm]
+
+
+def two_hands(right, left, right_label="Right", left_label="Left"):
+    return HandTrackingResult(hands=[right, left],
+                              handedness=[right_label, left_label])
+
+
+def _spread_result():
+    """Two open palms far apart in the frame -> a spread."""
+    return two_hands(_shift(open_hand(), 0.3, 0.0),
+                     _shift(open_hand(), -0.3, 0.0))
+
+
 def test_idle_wakes_on_hand():
     pipe, mouse, hud, _ = make_pipeline(hands(open_hand()), mode=Mode.IDLE)
     actions = pipe.step(FRAME)
@@ -473,3 +488,60 @@ def test_default_virtual_mouse_reads_control_config():
         ControlPipeline(config=cfg, hud=FakeHUD(),
                         frame_source=lambda: (True, FRAME))
     vm.assert_called_once_with(failsafe=False)
+
+
+def test_two_hand_spread_toggles_transfer_mode():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = _spread_result()
+    for _ in range(pipe.config.control.hold_frames):
+        pipe.step(FRAME)
+    assert pipe.modes.mode == Mode.TRANSFER
+    # Held spread does not re-fire.
+    pipe.step(FRAME)
+    assert pipe.modes.mode == Mode.TRANSFER
+    # Releasing the spread (one hand) re-arms it; spread again exits Transfer.
+    tracker.result = hands(open_hand())
+    pipe.step(FRAME)
+    tracker.result = _spread_result()
+    for _ in range(pipe.config.control.hold_frames):
+        pipe.step(FRAME)
+    assert pipe.modes.mode == Mode.CONTROL
+
+
+def test_hands_touching_is_not_a_spread():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = two_hands(_shift(open_hand(), 0.05, 0.0),
+                               _shift(open_hand(), -0.05, 0.0))
+    for _ in range(5):
+        pipe.step(FRAME)
+    assert pipe.modes.mode == Mode.CONTROL
+
+
+def test_primary_hand_prefers_right():
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    # Right hand = fist (would drag), Left hand = point (would move).
+    tracker.result = two_hands(_shift(fist(), 0.05, 0.0),
+                               _shift(point_hand(), -0.05, 0.0))
+    for _ in range(pipe.config.control.hold_frames):
+        pipe.step(FRAME)
+    assert any(c[0] == "drag_start" for c in mouse.calls)
+    assert not any(c[0] == "move" for c in mouse.calls)
+
+
+def test_open_palm_catch_in_transfer_fires_once():
+    pipe, mouse, hud, _ = make_pipeline(hands(open_hand()), mode=Mode.TRANSFER)
+    all_actions = []
+    for _ in range(3):
+        all_actions.extend(pipe.step(FRAME))
+    names = [a.name for a in all_actions]
+    assert names.count("catch") == 1  # edge-triggered, not per-frame
+    assert all(a.gesture == "open_palm" for a in all_actions if a.name == "catch")
+
+
+def test_open_palm_release_in_chat_fires_once():
+    pipe, mouse, hud, _ = make_pipeline(hands(open_hand()), mode=Mode.CHAT)
+    all_actions = []
+    for _ in range(3):
+        all_actions.extend(pipe.step(FRAME))
+    names = [a.name for a in all_actions]
+    assert names.count("release") == 1

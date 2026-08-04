@@ -18,7 +18,7 @@ from ..control.modes import Mode, ModeMachine
 from ..control.virtual_mouse import VirtualMouse
 from ..hud.events import MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
 from .camera import Camera
-from .geometry import classify
+from .geometry import classify, two_hand_spread
 from .hand_tracker import HandLandmarkerTracker
 from .mapping import CursorMapper, MappingConfig
 
@@ -90,6 +90,9 @@ class ControlPipeline:
         self._prev_two_pinch = False
         self._prev_thumbs_up = False
         self._prev_thumbs_down = False
+        self._prev_open_palm = False
+        self._spread_active = False
+        self._spread_frames = 0
         self._dragging = False
         self._last_gesture = ""
         self._gesture_frames = 0
@@ -140,12 +143,59 @@ class ControlPipeline:
 
         self._lost_frames = 0
         self.stats.hands_seen += 1
-        lmks = result.hands[0]
+        lmks = self._primary_hand(result)
+        if lmks is None:
+            self._emit(result, None)
+            return actions
 
+        self._spread(result)
         pose = classify(lmks)
         self._emit(result, pose)
         actions.extend(self._dispatch(pose))
         return actions
+
+    # ------------------------------------------------------------------ #
+    # two-hand selection + spread trigger
+    # ------------------------------------------------------------------ #
+
+    def _primary_hand(self, result) -> list | None:
+        """Pick which hand drives the cursor when multiple are present.
+
+        Prefers the configured handedness (e.g. "Right"); falls back to the
+        first detected hand. Returns ``None`` only when nothing is tracked.
+        """
+        hands = result.hands or []
+        if not hands:
+            return None
+        if len(hands) > 1 and result.handedness:
+            preferred = self.config.control.preferred_hand
+            for lmks, hand in zip(hands, result.handedness):
+                if hand == preferred:
+                    return lmks
+        return hands[0]
+
+    def _spread(self, result) -> None:
+        """Edge-trigger the two-hand spread: toggles Control <-> Transfer.
+
+        Both hands apart (palm-center distance past the threshold) for
+        ``hold_frames`` arms the trigger; releasing the spread re-arms it.
+        """
+        hands = result.hands or []
+        if len(hands) < 2:
+            self._spread_active = False
+            self._spread_frames = 0
+            return
+        spread = (two_hand_spread(hands[0], hands[1])
+                  >= self.config.control.two_hand_spread_threshold)
+        if spread:
+            self._spread_frames += 1
+            if (self._spread_frames >= self.config.control.hold_frames
+                    and not self._spread_active):
+                self._spread_active = True
+                self.modes.transition("transfer_gesture")
+        else:
+            self._spread_frames = 0
+            self._spread_active = False
 
     # ------------------------------------------------------------------ #
     # gesture dispatch
@@ -171,6 +221,8 @@ class ControlPipeline:
             self._prev_thumbs_up = False
         if gesture != "thumbs_down":
             self._prev_thumbs_down = False
+        if gesture != "open_palm":
+            self._prev_open_palm = False
 
         # Leaving "fist" releases an active drag (fist = hold, release = drop).
         if self._dragging and gesture != "fist":
@@ -202,6 +254,14 @@ class ControlPipeline:
             if not self._prev_thumbs_down:
                 actions.append(PipelineAction("cancel", gesture="thumbs_down"))
             self._prev_thumbs_down = True
+        elif gesture == "open_palm":
+            # Transfer: open palm = "catch". Chat: open palm = "release".
+            if not self._prev_open_palm:
+                if self.modes.mode == Mode.TRANSFER:
+                    actions.append(PipelineAction("catch", gesture="open_palm"))
+                elif self.modes.mode == Mode.CHAT:
+                    actions.append(PipelineAction("release", gesture="open_palm"))
+            self._prev_open_palm = True
         return actions
 
     def _on_disallowed(self, gesture: str) -> None:
@@ -214,6 +274,8 @@ class ControlPipeline:
             self._prev_thumbs_up = False
         if gesture != "thumbs_down":
             self._prev_thumbs_down = False
+        if gesture != "open_palm":
+            self._prev_open_palm = False
 
     def _hold_stable(self, gesture: str) -> bool:
         if gesture == self._last_gesture:
@@ -329,6 +391,9 @@ class ControlPipeline:
         self._prev_two_pinch = False
         self._prev_thumbs_up = False
         self._prev_thumbs_down = False
+        self._prev_open_palm = False
+        self._spread_active = False
+        self._spread_frames = 0
         self._last_gesture = None
         self._gesture_frames = 0
         self._v_sign_active = False

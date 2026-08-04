@@ -27,8 +27,9 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [x] Media & volume control (F5 play/pause, F6 next, F7 previous, F8 mute, F9/F10 volume)
 - [x] HUD overlay: skeleton, reticle, mode/fps/gesture status, monitor-layout map
 - [x] FPS/stability: throttled HUD broadcasts (skeleton/status), hand-loss grace period
-- [ ] Mode system: Idle / Control / Chat / Transfer / Presentation
-- [ ] Gesture confidence thresholds + calibration UI
+- [x] Two-hand detection + spread gesture: toggles Control ↔ Transfer mode
+- [x] Open palm actions: catch (Transfer), release (Chat)
+- [ ] Mode system: Presentation mode trigger + Chat wiring
 - [ ] **Exit criteria:** < 80 ms gesture→action latency; zero misfires in a 10-minute session
 
 **Head start:** `oleg-putseiko/gesture-control` (plugin architecture), `Ns81000/Vision-Mouse` (offline exe, hotkey toggle).

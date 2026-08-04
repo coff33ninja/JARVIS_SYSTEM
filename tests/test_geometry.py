@@ -16,6 +16,7 @@ from app.perception.geometry import (
     palm_center,
     pinch_ratio,
     point_position,
+    two_hand_spread,
 )
 from conftest import (
     fist,
@@ -148,6 +149,20 @@ def test_index_xy_tracks_index_tip():
 
 def test_distance_metric():
     assert distance((0.0, 0.0, 0.0), (3.0, 4.0, 0.0)) == 5.0
+
+
+def test_two_hand_spread_reflects_palm_distance():
+    """Spread grows when the two hands sit far apart in the frame."""
+    def shifted(lm, dx, dy):
+        return [(x + dx, y + dy, z) for x, y, z in lm]
+
+    left = shifted(open_hand(), -0.3, 0.0)
+    right = shifted(open_hand(), 0.3, 0.0)
+    close = shifted(open_hand(), 0.05, 0.0)
+    assert two_hand_spread(left, right) > two_hand_spread(left, close)
+    assert two_hand_spread(left, close) < 0.4          # not a spread
+    assert two_hand_spread(left, right) > 0.4          # is a spread
+    assert two_hand_spread(open_hand(), open_hand()) == 0.0
 
 
 def test_middle_tip_constant_sanity():

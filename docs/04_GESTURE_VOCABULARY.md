@@ -15,6 +15,7 @@ Reference spec for gesture → action mapping. Hand landmarks use MediaPipe's 21
 | Thumbs up | Thumb up, fingers curled | Accept / confirm | Chat |
 | Thumbs down | Thumb down, fingers curled | Reject / cancel | Chat |
 | Swipe (left/right) | Hand sweeps sideways | Alt+Tab / switch window / next track | Control |
+| Two-hand spread | Both palms far apart, held ~2 frames | Toggle Control ↔ Transfer mode | Control, Transfer |
 | Two-hand pinch apart | Both hands spread | Zoom / launch transfer-ready mode | Control, Transfer |
 | Grab (fist held still) | Fist, stationary 500 ms | Pick up selected content | Transfer |
 | Throw (flick) | Fist → open hand with forward velocity | Send selected content to target device | Transfer |
@@ -49,6 +50,8 @@ Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice comma
 | F10 | Media volume up |
 
 Swipe (in Control) fires `Alt+Tab` (swipe right) / `Alt+Shift+Tab` (swipe left) via a configurable threshold (`control.swipe_threshold_px`, default 250 px of accumulated screen motion).
+
+Two-hand spread toggles Control ↔ Transfer (`control.two_hand_spread_threshold`, default 0.4 normalized palm-center distance; held for `control.hold_frames`). While both hands are tracked, the cursor follows the configured preferred hand (`control.preferred_hand`, default "Right"). Open palm acts in Transfer (`catch`) and Chat (`release`), both edge-triggered.
 
 Media hotkeys are dispatched through `MediaController` (`app/control/virtual_keyboard.py`), which taps the OS media keys via pynput (`media_play_pause`, `media_next`, `media_previous`, `media_stop`, `media_volume_mute`, `media_volume_up`, `media_volume_down`). Unknown keys are ignored gracefully so the app never crashes on unusual keyboards.
 

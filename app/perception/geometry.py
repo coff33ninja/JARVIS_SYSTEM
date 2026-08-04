@@ -107,6 +107,16 @@ def palm_center(lmks: Landmarks) -> Landmark:
     )
 
 
+def two_hand_spread(lmks_a: Landmarks, lmks_b: Landmarks) -> float:
+    """Normalized [0, 1] distance between the two hands' palm centers.
+
+    Used for the two-hand spread gesture (both palms far apart) that toggles
+    Transfer mode. Coordinates are already normalized to the frame, so the
+    value reflects how far apart the hands sit in view.
+    """
+    return distance(palm_center(lmks_a), palm_center(lmks_b))
+
+
 def finger_extended(lmks: Landmarks, name: str) -> bool:
     """True when a fingertip is pushed out past its DIP joint.
 

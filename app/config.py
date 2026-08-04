@@ -32,7 +32,7 @@ class PerceptionConfig:
     width: int = 640
     height: int = 480
     fps: int = 30
-    max_hands: int = 1
+    max_hands: int = 2
     min_hand_confidence: float = 0.5
     min_tracking_confidence: float = 0.5
     min_presence_confidence: float = 0.5
@@ -71,6 +71,13 @@ class ControlConfig:
     # the smoothing filter, preventing cursor jumps during tracking noise.
     # After this many consecutive lost frames the filter fully resets.
     lost_grace_frames: int = 3
+
+    # Two-hand spread -> Transfer mode. "Spread" = both palms far apart in
+    # the frame; holding the pose toggles Control <-> Transfer (edge-triggered
+    # by the same hold_frames debounce). preferred_hand drives the cursor when
+    # both hands are present (MediaPipe handedness label, e.g. "Right").
+    preferred_hand: str = "Right"
+    two_hand_spread_threshold: float = 0.4   # normalized palm-center distance
 
     # PyAutoGUI corner fail-safe. Off for gesture control: corners are
     # legitimate cursor targets and the loop has its own abort (ESC/q).

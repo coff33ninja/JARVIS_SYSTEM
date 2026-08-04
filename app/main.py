@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("JARVIS Phase 1 running (ESC/q to quit). "
                 "Pinch = click, two-finger pinch = right click, "
                 "fist = drag, V-sign = scroll, swipe = next/prev window. "
+                "Two-hand spread = Transfer mode. "
                 "F2 = idle/control toggle, F4 = on-screen keyboard. "
                 "F5/F6/F7 = play-pause/next/previous, F8 mute, "
                 "F9/F10 = volume down/up.")

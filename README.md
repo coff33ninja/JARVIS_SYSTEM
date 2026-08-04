@@ -62,15 +62,15 @@ This project was scaffolded from a research conversation originally produced in 
 
 ## Getting Started
 
-Phase 1 (hand tracking → virtual mouse → overlay) is implemented. Phase 2 additions (thumbs up/down in Chat, Alt+Tab swipe, on-screen keyboard toggle, media/volume hotkeys, multi-monitor cursor mapping) are in place and tested. Set up per `docs/07_SETUP.md`, then:
+Phase 1 (hand tracking → virtual mouse → overlay) is implemented. Phase 2 additions (thumbs up/down in Chat, Alt+Tab swipe, on-screen keyboard toggle, media/volume hotkeys, multi-monitor cursor mapping, two-hand spread → Transfer mode) are in place and tested. Set up per `docs/07_SETUP.md`, then:
 
 ```sh
 uv run python scripts/smoke_test_hands.py     # verify webcam + MediaPipe hand tracking
 uv run python scripts/jarvis_control.py       # run the Phase 1 control loop (--no-hud to disable overlay)
-uv run pytest -q                               # 236 tests
+uv run pytest -q                               # 242 tests
 ```
 
-Controls: pinch = click, two-finger pinch = right click, fist = drag, V-sign = scroll, swipe = next/prev window, F2 = idle/control toggle, F4 = on-screen keyboard, F5–F10 = media play/pause, next/prev, mute, volume down/up.
+Controls: pinch = click, two-finger pinch = right click, fist = drag, V-sign = scroll, swipe = next/prev window, two-hand spread = Transfer mode (open palm = catch), F2 = idle/control toggle, F4 = on-screen keyboard, F5–F10 = media play/pause, next/prev, mute, volume down/up.
 
 The HUD overlay (`hud/index.html`, served at the websocket port) draws the hand skeleton, cursor reticle, current mode/fps/gesture, and a monitor-layout map; skeleton/status broadcasts are throttled so the webcam loop stays fast.
 
