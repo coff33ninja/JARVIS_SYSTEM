@@ -150,6 +150,9 @@ class Recaller:
             sim = float(np.dot(qvec, vec) / (qnorm * np.linalg.norm(vec) + 1e-9))
             row = self.store.get_row(table, row_id)
             if row:
+                row = dict(row)
+                row["table"] = table
+                row["row_id"] = row_id
                 scored.append((sim, row))
         scored.sort(key=lambda item: item[0], reverse=True)
         return [
