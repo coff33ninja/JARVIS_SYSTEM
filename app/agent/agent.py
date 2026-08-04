@@ -57,9 +57,11 @@ class Agent:
         self.session_id = session_id
         self.config = config or AgentConfig()
         self._tools_supported = True
+        self._model_checked = False
 
     def handle_turn(self, text: str, session_id: str | None = None) -> str:
         """Process one user turn and return the assistant's final text."""
+        self._ensure_model_once()
         sid = session_id or self.session_id
         if sid is None:
             sid = uuid.uuid4().hex
@@ -128,6 +130,19 @@ class Agent:
     # ------------------------------------------------------------------ #
     # internals
     # ------------------------------------------------------------------ #
+
+    def _ensure_model_once(self) -> None:
+        """Auto-install the LLM model on first use (first-run convenience)."""
+        if self._model_checked:
+            return
+        self._model_checked = True
+        ensure = getattr(self.llm, "ensure_model", None)
+        if ensure is None:
+            return
+        try:
+            ensure()
+        except Exception as exc:
+            logger.warning("ensure_model failed: %s", exc)
 
     def _system_message(self, memories: list[ScoredHit]) -> dict:
         parts = [SYSTEM_PROMPT, f"## Current environment\nFocused window: {focused_window_title()}"]

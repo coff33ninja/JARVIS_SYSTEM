@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import urllib.error
+import urllib.request
 from types import SimpleNamespace
 
 import pytest
@@ -37,21 +40,22 @@ class FakeChat:
 
 
 class FakeModels:
-    def __init__(self, ok=True):
+    def __init__(self, ok=True, ids=("fake",)):
         self.ok = ok
         self.calls = 0
+        self.ids = list(ids)
 
     def list(self):
         self.calls += 1
         if not self.ok:
             raise RuntimeError("connection refused")
-        return [SimpleNamespace(id="fake")]
+        return SimpleNamespace(data=[SimpleNamespace(id=i) for i in self.ids])
 
 
 class FakeClient:
-    def __init__(self, responses=None, models_ok=True):
+    def __init__(self, responses=None, models_ok=True, model_ids=("fake",)):
         self.chat = SimpleNamespace(completions=FakeChat(responses or []))
-        self.models = FakeModels(models_ok)
+        self.models = FakeModels(models_ok, model_ids)
 
 
 def _make_client(responses=None, models_ok=True, monkeypatch=None):
@@ -116,3 +120,119 @@ def test_chat_raises_when_client_unavailable(monkeypatch):
     client._build_client = lambda: None
     with pytest.raises(RuntimeError):
         client.chat([{"role": "user", "content": "x"}])
+
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def read(self):
+        return self.payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class FakeURLopener:
+    """Queue of responses/errors, one per urlopen call."""
+
+    def __init__(self, handlers):
+        self.handlers = list(handlers)
+        self.calls = []
+
+    def __call__(self, url, timeout=None, **kw):
+        self.calls.append((url, timeout))
+        handler = self.handlers.pop(0)
+        if isinstance(handler, Exception):
+            raise handler
+        return FakeResponse(json.dumps(handler).encode())
+
+
+def _make_auto_pull_client(monkeypatch, model="llama3.2", ids=("other",),
+                           auto_pull=True, models_ok=True):
+    client = LLMClient(LLMConfig(
+        base_url="http://localhost:9/v1", model=model, auto_pull=auto_pull,
+    ))
+    fake = FakeClient(models_ok=models_ok, model_ids=ids)
+    client._build_client = lambda: fake
+    return client, fake
+
+
+def test_ensure_model_true_when_installed(monkeypatch):
+    opener = FakeURLopener([])
+    monkeypatch.setattr(urllib.request, "urlopen", opener)
+    client, _ = _make_auto_pull_client(monkeypatch, ids=("llama3.2",))
+    assert client.ensure_model() is True
+    assert opener.calls == []  # no pull needed
+
+
+def test_ensure_model_pulls_when_missing(monkeypatch):
+    opener = FakeURLopener([
+        {"models": [{"name": "other"}]},      # GET /api/tags
+        {"status": "success"},                 # POST /api/pull
+    ])
+    monkeypatch.setattr(urllib.request, "urlopen", opener)
+    client, _ = _make_auto_pull_client(monkeypatch)
+    assert client.ensure_model() is True
+    tags_url, _ = opener.calls[0]
+    assert tags_url == "http://localhost:9/api/tags"
+    pull_url, pull_timeout = opener.calls[1]
+    assert pull_url.full_url == "http://localhost:9/api/pull"
+    assert pull_timeout == 3600
+
+
+def test_ensure_model_ignores_tag_suffix(monkeypatch):
+    opener = FakeURLopener([])
+    monkeypatch.setattr(urllib.request, "urlopen", opener)
+    client, _ = _make_auto_pull_client(monkeypatch, model="llama3.2:latest",
+                                       ids=("llama3.2",))
+    assert client.ensure_model() is True
+    assert opener.calls == []
+
+
+def test_ensure_model_false_when_not_ollama(monkeypatch):
+    opener = FakeURLopener([urllib.error.URLError("no /api/tags")])
+    monkeypatch.setattr(urllib.request, "urlopen", opener)
+    client, _ = _make_auto_pull_client(monkeypatch)
+    assert client.ensure_model() is False
+    assert len(opener.calls) == 1  # never attempted a pull
+
+
+def test_ensure_model_disabled(monkeypatch):
+    client, _ = _make_auto_pull_client(monkeypatch, auto_pull=False)
+    assert client.ensure_model() is False
+
+
+def test_ensure_model_false_when_endpoint_down(monkeypatch):
+    client, _ = _make_auto_pull_client(monkeypatch, models_ok=False)
+    assert client.ensure_model() is False
+
+
+def test_ensure_model_pull_failure(monkeypatch):
+    opener = FakeURLopener([
+        {"models": []},
+        {"status": "error", "error": "blob unknown"},
+    ])
+    monkeypatch.setattr(urllib.request, "urlopen", opener)
+    client, _ = _make_auto_pull_client(monkeypatch)
+    assert client.ensure_model() is False
+
+
+def test_ensure_model_pull_network_error(monkeypatch):
+    opener = FakeURLopener([
+        {"models": []},
+        urllib.error.URLError("timeout"),
+    ])
+    monkeypatch.setattr(urllib.request, "urlopen", opener)
+    client, _ = _make_auto_pull_client(monkeypatch)
+    assert client.ensure_model() is False
+
+
+def test_from_env_auto_pull_parsing(monkeypatch):
+    monkeypatch.setenv("JARVIS_LLM_AUTO_PULL", "0")
+    assert LLMConfig.from_env().auto_pull is False
+    monkeypatch.setenv("JARVIS_LLM_AUTO_PULL", "true")
+    assert LLMConfig.from_env().auto_pull is True
