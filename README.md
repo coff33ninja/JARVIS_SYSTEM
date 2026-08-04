@@ -70,7 +70,7 @@ uv run python scripts/jarvis_control.py       # run the Phase 1 control loop (--
 uv run pytest -q                               # 242 tests
 ```
 
-Controls: pinch = click, two-finger pinch = right click, fist = drag, V-sign = scroll, swipe = next/prev window, two-hand spread = Transfer mode (open palm = catch), F2 = idle/control toggle, F4 = on-screen keyboard, F5–F10 = media play/pause, next/prev, mute, volume down/up.
+Controls: pinch = click, two-finger pinch = right click, fist = drag, V-sign = scroll, swipe = next/prev window, two-hand spread = Transfer mode (open palm = catch), F2 = idle/control toggle, F3 = presentation mode (V-sign/swipe = slide nav), F4 = on-screen keyboard, F5–F10 = media play/pause, next/prev, mute, volume down/up.
 
 The HUD overlay (`hud/index.html`, served at the websocket port) draws the hand skeleton, cursor reticle, current mode/fps/gesture, and a monitor-layout map; skeleton/status broadcasts are throttled so the webcam loop stays fast.
 

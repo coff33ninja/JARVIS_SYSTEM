@@ -1,0 +1,1 @@
+uv run python scripts/jarvis_control.py

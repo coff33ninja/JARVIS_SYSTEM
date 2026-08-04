@@ -545,3 +545,49 @@ def test_open_palm_release_in_chat_fires_once():
         all_actions.extend(pipe.step(FRAME))
     names = [a.name for a in all_actions]
     assert names.count("release") == 1
+
+
+def test_presentation_point_moves_cursor():
+    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()),
+                                        mode=Mode.PRESENTATION)
+    for _ in range(pipe.config.control.hold_frames):
+        pipe.step(FRAME)
+    assert any(c[0] == "move" for c in mouse.calls)
+
+
+def test_presentation_pinch_is_inert():
+    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()),
+                                        mode=Mode.PRESENTATION)
+    for _ in range(3):
+        pipe.step(FRAME)
+    assert not any(c[0] in ("click", "right_click") for c in mouse.calls)
+
+
+def test_presentation_swipe_navigates_slides():
+    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()),
+                                        mode=Mode.PRESENTATION)
+    pipe._prev_move_sx = 400
+    pipe._swipe_accum = 0.0
+    pipe._swipe_last = 0.0
+    pipe._swipe(900, [])  # right sweep = next slide
+    assert ("hotkey", ("pagedown",)) in mouse.calls
+    pipe._prev_move_sx = 900
+    pipe._swipe_accum = 0.0
+    pipe._swipe_last = 0.0
+    pipe._swipe(200, [])  # left sweep = previous slide
+    assert ("hotkey", ("pageup",)) in mouse.calls
+    assert ("hotkey", ("alt", "tab")) not in mouse.calls
+
+
+def test_presentation_v_sign_navigates_slides():
+    from conftest import v_sign as v_sign_hand
+
+    pipe, mouse, hud, tracker = make_pipeline(hands(v_sign_hand()),
+                                              mode=Mode.PRESENTATION)
+    # Stable V-sign (seeds the reference), then move the hand up in the frame.
+    for _ in range(2):
+        pipe.step(FRAME)
+    tracker.result = hands(_shift(v_sign_hand(), 0.0, -0.05))
+    pipe.step(FRAME)
+    assert any(c[0] == "hotkey" and c[1] == ("pageup",) for c in mouse.calls)
+    assert all(c[0] != "scroll" for c in mouse.calls)

@@ -41,6 +41,7 @@ Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice comma
 |---|---|
 | ESC / q | Quit the control loop |
 | F2 | Toggle Idle ↔ Control mode |
+| F3 | Toggle Presentation mode |
 | F4 | Toggle the on-screen keyboard (Windows `osk.exe`) |
 | F5 | Media play/pause |
 | F6 | Media next track |
@@ -52,6 +53,8 @@ Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice comma
 Swipe (in Control) fires `Alt+Tab` (swipe right) / `Alt+Shift+Tab` (swipe left) via a configurable threshold (`control.swipe_threshold_px`, default 250 px of accumulated screen motion).
 
 Two-hand spread toggles Control ↔ Transfer (`control.two_hand_spread_threshold`, default 0.4 normalized palm-center distance; held for `control.hold_frames`). While both hands are tracked, the cursor follows the configured preferred hand (`control.preferred_hand`, default "Right"). Open palm acts in Transfer (`catch`) and Chat (`release`), both edge-triggered.
+
+In Presentation mode (F3), V-sign and swipe navigate slides instead of scrolling / switching windows: an upward V-sign sweep or left swipe fires `PageUp` (previous slide); downward or right fires `PageDown` (next slide). Point still moves the cursor as a laser pointer.
 
 Media hotkeys are dispatched through `MediaController` (`app/control/virtual_keyboard.py`), which taps the OS media keys via pynput (`media_play_pause`, `media_next`, `media_previous`, `media_stop`, `media_volume_mute`, `media_volume_up`, `media_volume_down`). Unknown keys are ignored gracefully so the app never crashes on unusual keyboards.
 

@@ -355,7 +355,10 @@ class ControlPipeline:
         direction = "right" if self._swipe_accum > 0 else "left"
         self._swipe_accum = 0.0
         self._swipe_last = now
-        if direction == "left":
+        if self.modes.mode == Mode.PRESENTATION:
+            # Swipe = slide navigation: right sweep -> next, left -> previous.
+            self.mouse.hotkey("pagedown" if direction == "right" else "pageup")
+        elif direction == "left":
             self.mouse.hotkey("alt", "shift", "tab")  # previous window
         else:
             self.mouse.hotkey("alt", "tab")           # next window
@@ -381,7 +384,14 @@ class ControlPipeline:
         if ticks:
             self._scroll_accum -= ticks * self.config.control.scroll_threshold
             self._scroll_last = now
-            self.mouse.scroll(ticks)
+            if self.modes.mode == Mode.PRESENTATION:
+                # V-sign = slide navigation: up -> previous, down -> next.
+                if ticks > 0:
+                    self.mouse.hotkey("pageup")
+                else:
+                    self.mouse.hotkey("pagedown")
+            else:
+                self.mouse.scroll(ticks)
             actions.append(PipelineAction("scroll", (ticks,), gesture="v_sign"))
 
     def _on_hand_lost(self) -> None:

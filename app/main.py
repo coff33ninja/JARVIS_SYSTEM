@@ -65,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     media = MediaController()
     stop = _StopKey(
         on_mode_toggle=lambda: pipeline.modes.transition("hotkey"),
+        on_present_toggle=lambda: pipeline.modes.transition("present_gesture"),
         on_keyboard_toggle=keyboard.toggle_osk,
         on_media=lambda name: media.action(name),
     )
@@ -72,7 +73,8 @@ def main(argv: list[str] | None = None) -> int:
                 "Pinch = click, two-finger pinch = right click, "
                 "fist = drag, V-sign = scroll, swipe = next/prev window. "
                 "Two-hand spread = Transfer mode. "
-                "F2 = idle/control toggle, F4 = on-screen keyboard. "
+                "F2 = idle/control toggle, F3 = presentation mode, "
+                "F4 = on-screen keyboard. "
                 "F5/F6/F7 = play-pause/next/previous, F8 mute, "
                 "F9/F10 = volume down/up.")
     try:
@@ -100,14 +102,15 @@ def _loop(pipeline: ControlPipeline, stop: "_StopKey") -> None:
 
 
 class _StopKey:
-    """Background key listener: ESC/q quit, F2 mode toggle, F4 OSK, F5-F10 media."""
+    """Background key listener: ESC/q quit, F2/F3 mode toggles, F4 OSK, F5-F10 media."""
 
-    def __init__(self, on_mode_toggle=None, on_keyboard_toggle=None,
-                 on_media=None):
+    def __init__(self, on_mode_toggle=None, on_present_toggle=None,
+                 on_keyboard_toggle=None, on_media=None):
         import threading
 
         self._event = threading.Event()
         self._on_mode_toggle = on_mode_toggle
+        self._on_present_toggle = on_present_toggle
         self._on_keyboard_toggle = on_keyboard_toggle
         self._on_media = on_media or (lambda _name: None)
         try:
@@ -128,6 +131,8 @@ class _StopKey:
             self._event.set()
         elif name == "Key.f2" and self._on_mode_toggle:
             self._on_mode_toggle()
+        elif name == "Key.f3" and self._on_present_toggle:
+            self._on_present_toggle()
         elif name == "Key.f4" and self._on_keyboard_toggle:
             self._on_keyboard_toggle()
         else:
