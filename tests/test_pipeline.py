@@ -207,3 +207,38 @@ def test_stats_recorded():
     assert pipe.stats.frames == 1
     assert pipe.stats.hands_seen == 1
     assert pipe.stats.detection_rate == 1.0
+
+
+def test_fps_tracks_frames_without_detection():
+    """fps window must tick even when no hand is in frame."""
+    from unittest.mock import patch
+
+    pipe, mouse, hud, _ = make_pipeline(HandTrackingResult(), mode=Mode.CONTROL)
+    pipe._window_start = 1000.0
+    clock = {"now": 1000.0}
+
+    def _mono():
+        clock["now"] += 0.5
+        return clock["now"]
+
+    with patch("app.perception.pipeline.time.monotonic", side_effect=_mono):
+        pipe.step(FRAME)
+        assert pipe.stats.last_fps == 0.0
+        pipe.step(FRAME)
+        assert pipe.stats.last_fps == 2.0
+
+
+def test_default_mapper_built_from_control_config():
+    from unittest.mock import patch
+
+    cfg = AppConfig()
+    cfg.control.gain_x = 5.0
+    pipe = None
+    with patch("app.perception.pipeline.Camera") as cam, \
+            patch("app.perception.pipeline.HandLandmarkerTracker") as tracker:
+        pipe = ControlPipeline(
+            config=cfg, mouse=FakeMouse(), hud=FakeHUD(),
+            frame_source=lambda: (True, FRAME))
+    assert pipe.mapper.config.gain_x == 5.0
+    assert pipe.mapper.config.invert_x is True
+    cam.assert_called_once_with(0, 640, 480)

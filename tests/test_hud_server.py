@@ -30,6 +30,10 @@ def _recv(server: HUDServer, count: int = 1):
     async def run():
         uri = f"ws://{server.config.host}:{server.config.port}"
         async with websockets.connect(uri) as ws:
+            for _ in range(50):  # wait for server-side handler registration
+                if server.client_count() >= 1:
+                    break
+                await asyncio.sleep(0.02)
             server.broadcast(StatusEvent(mode="control"))
             server.broadcast(ReticleEvent(x=1, y=2))
             server.broadcast(SkeletonEvent(hands=[]))

@@ -98,7 +98,7 @@ class AppConfig:
         from bricking the app.
         """
         cfg = cls()
-        path = Path(path)
+        path = Path(path) if path is not None else Path(CONFIG_FILE)
         if not path.exists():
             return cfg
         try:

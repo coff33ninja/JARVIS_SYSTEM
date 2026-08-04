@@ -20,7 +20,7 @@ from ..hud.events import ReticleEvent, SkeletonEvent, StatusEvent
 from .camera import Camera
 from .geometry import classify
 from .hand_tracker import HandLandmarkerTracker
-from .mapping import CursorMapper
+from .mapping import CursorMapper, MappingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,8 @@ class ControlPipeline:
             min_tracking_confidence=self.config.perception.min_tracking_confidence,
         )
         self.mouse = mouse or VirtualMouse()
-        self.mapper = mapper or CursorMapper.from_control(self.config.control)
+        self.mapper = mapper or CursorMapper(
+            config=MappingConfig.from_control(self.config.control))
         self.hud = hud
         self.modes = modes or ModeMachine()
         self.frame_source = frame_source
@@ -110,6 +111,7 @@ class ControlPipeline:
                 return actions
         self.stats.frames += 1
         self._window_frames += 1
+        self._tick_fps()
 
         result = self.tracker.process(frame)
         if not result.detected:
@@ -127,7 +129,6 @@ class ControlPipeline:
         pose = classify(lmks)
         self._emit(result, pose)
         actions.extend(self._dispatch(pose))
-        self._tick_fps()
         return actions
 
     # ------------------------------------------------------------------ #
