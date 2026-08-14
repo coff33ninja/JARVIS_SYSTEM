@@ -10,7 +10,11 @@ from app.config import AppConfig
 from app.control.modes import Mode, ModeMachine
 from app.perception.hand_tracker import HandTrackingResult
 from app.perception.mapping import CursorMapper, MappingConfig
-from app.perception.pipeline import ControlPipeline
+from app.perception.pipeline import (
+    DISPATCHABLE_GESTURES,
+    ControlPipeline,
+    PipelineAction,
+)
 
 
 class FakeTracker:
@@ -1211,7 +1215,8 @@ def test_gesture_toggle_reenables_pinch():
     assert any(a.name == "left_click" for a in seen)
 
 
-def test_gestures_menu_category_lists_actions():
+def test_gestures_menu_category_lists_bindings():
+    """Gestures rows are per-gesture toggles plus a Rebind picker (ADR-011)."""
     pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
     pipe.tracker.result = two_hands(
         _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
@@ -1221,34 +1226,174 @@ def test_gestures_menu_category_lists_actions():
     ev = menu_events(hud)[-1]
     gestures = next(c for c in ev["categories"] if c["id"] == "gestures")
     ids = [i["id"] for i in gestures["items"]]
-    assert ids == list(pipe.DISPATCH_ACTIONS)
+    assert ids == [f"gesture.{g}" for g in DISPATCHABLE_GESTURES] + ["gesture.rebind"]
     # Rows ship their live enabled state (checkmark).
-    row = next(i for i in gestures["items"] if i["id"] == "click.left")
+    row = next(i for i in gestures["items"] if i["id"] == "gesture.pinch")
     assert row["checked"] is True
 
 
 def test_gestures_menu_confirm_toggles_binding():
-    """Confirming the row under the pointer flips that action off."""
+    """Confirming a gesture row flips that gesture's bindings off."""
     pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
-    two = lambda secondary: two_hands(
-        _shift(point_hand(), 0.3, -0.3), secondary
-    )  # top-left = Gestures wedge
-    pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens
-    step_actions(pipe, 1000.33)  # highlight Gestures category
+    # Aim at the Gestures category (index 4 of 6) and the pinch row.
+    pipe._menu.select_category(-1.0, 0.0)
     assert pipe._menu.category_idx == 4
-    # The row under the Gestures wedge is item 7 (catch).
-    pipe.tracker.result = two_hands(
-        _shift(pinch_hand(), 0.3, -0.3), _shift(fist(), -0.3, 0.0)
-    )
-    actions = step_actions(pipe, 1000.35)  # pinch confirms the same row
-    assert ("gesture.toggle", ("catch", False)) in [(a.name, a.args) for a in actions]
-    # open_palm no longer resolves in Transfer -> catch is inert.
-    assert pipe._registry.resolve("open_palm", "transfer") is None
-    assert pipe._registry.resolve("open_palm", "chat") == "release"
+    pipe._menu.select_item(1.0, -0.5)
+    item = pipe._menu.confirm()
+    assert item is not None and item.id == "gesture.pinch"
+    actions: list[PipelineAction] = []
+    assert pipe._menu_confirm(item, actions) is True
+    assert ("gesture.toggle", ("pinch", False)) in [(a.name, a.args) for a in actions]
+    # pinch no longer resolves; other gestures are untouched.
+    assert pipe._registry.resolve("pinch", "control") is None
+    assert pipe._registry.resolve("two_finger_pinch", "control") == "click.right"
     # The re-broadcast carries the unchecked row.
+    pipe._menu.close()
+    pipe._menu_dirty = True
+    pipe._broadcast_menu()
     ev = menu_events(hud)[-1]
     gestures = next(c for c in ev["categories"] if c["id"] == "gestures")
-    row = next(i for i in gestures["items"] if i["id"] == "catch")
+    row = next(i for i in gestures["items"] if i["id"] == "gesture.pinch")
     assert row["checked"] is False
+
+
+def test_gestures_menu_rebind_points_gesture_at_action():
+    """The Rebind picker re-points a gesture; the menu closes on success."""
+    pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    pipe._menu.category_idx = 4  # Gestures
+    pipe._menu.item_idx = 7  # "Rebind…"
+    rebind = pipe._menu.confirm()
+    assert rebind.id == "gesture.rebind"
+    actions: list[PipelineAction] = []
+    assert pipe._menu_confirm(rebind, actions) is False  # pushes the gesture picker
+    assert pipe._menu.in_submenu
+    assert [i.id for i in pipe._menu.active_items()] == [
+        f"rebind.{g}" for g in DISPATCHABLE_GESTURES
+    ] + ["menu.back"]
+    # Pick "pinch" (index 1), then "cancel" (index 6) from the action picker.
+    pipe._menu.item_idx = 1
+    gpick = pipe._menu.confirm()
+    assert gpick.id == "rebind.pinch"
+    actions = []
+    assert pipe._menu_confirm(gpick, actions) is False  # pushes the action picker
+    pipe._menu.item_idx = 6
+    apick = pipe._menu.confirm()
+    assert apick.params == {"gesture": "pinch", "action": "cancel"}
+    actions = []
+    assert pipe._menu_confirm(apick, actions) is True  # applied, closes
+    assert ("gesture.rebind", ("pinch", "cancel")) in [
+        (a.name, a.args) for a in actions
+    ]
+    assert pipe._registry.resolve("pinch", "control") == "cancel"
+    # The picker's current-binding checkmark moves with the rebind.
+    pipe._menu.close()
+    pipe._menu_dirty = True
+    pipe._broadcast_menu()
+    ev = menu_events(hud)[-1]
+    gestures = next(c for c in ev["categories"] if c["id"] == "gestures")
+    row = next(i for i in gestures["items"] if i["id"] == "gesture.pinch")
+    assert row["checked"] is True
+
+
+def test_gestures_menu_rebind_same_action_is_noop():
+    """Rebinding a gesture to its current action closes cleanly, no warning."""
+    pipe, _, _, _ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    pipe._menu.category_idx = 4
+    pipe._menu.item_idx = 7
+    rebind = pipe._menu.confirm()
+    actions: list[PipelineAction] = []
+    pipe._menu_confirm(rebind, actions)
+    pipe._menu.item_idx = 1  # pinch
+    gpick = pipe._menu.confirm()
+    pipe._menu_confirm(gpick, actions)
+    pipe._menu.item_idx = 1  # click.left is pinch's current binding
+    apick = pipe._menu.confirm()
+    actions = []
+    assert pipe._menu_confirm(apick, actions) is True  # no-op success closes
+    assert pipe._registry.resolve("pinch", "control") == "click.left"
+    assert pipe._menu_notice == "Pinch -> Click Left"
+
+
+def test_thresholds_menu_steps_and_resets_value():
+    """Thresholds rows nudge/reset live config; steps stay in the submenu."""
+    cfg = AppConfig()
+    pipe, _, _, _ = make_pipeline(monitors=make_two_monitors(), config=cfg)
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    pipe._menu.category_idx = 5  # Thresholds (last of 6)
+    pipe._menu.item_idx = 0  # pinch_threshold
+    row = pipe._menu.confirm()
+    assert row.id == "threshold.pinch_threshold"
+    actions: list[PipelineAction] = []
+    assert pipe._menu_confirm(row, actions) is False  # pushes the submenu
+    assert pipe._menu.in_submenu
+    # Increase row (index 0) nudges pinch_threshold up one step.
+    pipe._menu.item_idx = 0
+    up = pipe._menu.confirm()
+    assert up.id == "threshold.pinch_threshold.up"
+    actions = []
+    assert pipe._menu_confirm(up, actions) is False  # stays open for repeat nudges
+    assert cfg.control.pinch_threshold == pytest.approx(0.07)
+    assert [(a.name, a.args) for a in actions] == [
+        ("threshold.step", ("pinch_threshold", pytest.approx(0.07)))
+    ]
+    # Reset row (index 2) returns to the config default.
+    pipe._menu.item_idx = 2
+    reset = pipe._menu.confirm()
+    assert reset.id == "threshold.pinch_threshold.reset"
+    actions = []
+    pipe._menu_confirm(reset, actions)
+    assert cfg.control.pinch_threshold == pytest.approx(0.06)
+
+
+def test_threshold_tuning_reaches_classify():
+    """Menu-tuned thresholds flow into the geometry config used by classify."""
+    cfg = AppConfig()
+    pipe, _, _, _ = make_pipeline(config=cfg)
+    assert pipe._geometry().pinch_threshold == pytest.approx(0.06)
+    cfg.control.pinch_threshold = 0.10
+    assert pipe._geometry().pinch_threshold == pytest.approx(0.10)
+
+
+def test_rebound_gesture_fires_edge_once_per_onset():
+    """A gesture rebound to an edge action clicks once, not every frame."""
+    pipe, mouse, *_ = make_pipeline()
+    pipe._registry.rebind("two_finger_pinch", "click.left")
+    pipe._registry.set_gesture_enabled("pinch", False)
+    pipe.tracker.result = hands(two_pinch_hand())
+    seen = []
+    for _ in range(pipe.config.control.hold_frames + 2):
+        seen.extend(step_actions(pipe, 1000.0))
+    lefts = [c for c in mouse.calls if c[0] == "click"]
+    assert len(lefts) == 1
+    assert any(a.name == "left_click" for a in seen)
+
+
+def test_gesture_toggle_by_gesture_uses_wildcard_binding():
+    """Toggle rows flip the gesture's own bindings, mode-specific ones included."""
+    pipe, _, _, _ = make_pipeline(mode=Mode.TRANSFER)
+    pipe._registry.set_gesture_enabled("open_palm", False)
+    pipe.tracker.result = hands(open_hand())
+    seen = []
+    for _ in range(pipe.config.control.hold_frames + 2):
+        seen.extend(step_actions(pipe, 1000.0))
+    assert not any(a.name in ("catch", "release") for a in seen)
+    assert pipe._registry.resolve("open_palm", "transfer") is None

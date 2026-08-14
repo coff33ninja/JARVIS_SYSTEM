@@ -90,13 +90,18 @@ class MenuEvent:
     lives in app/control/menu.py; the pipeline emits this so the frontend can
     render). ``category`` / ``item`` are the ids under the reticle highlight,
     empty when nothing is selected. ``categories`` carries the full (small)
-    menu structure: pie slices and their leaf items.
+    menu structure: pie slices and their leaf items. ``submenu`` flags a
+    pushed item list (ADR-011 rebind / threshold pickers) rendered as the
+    inner ring with the category ring hidden; ``notice`` is a one-shot status
+    line (collision warning, applied rebind, new threshold value).
     """
 
     state: str = "closed"
     category: str = ""
     item: str = ""
     categories: list[dict[str, Any]] = field(default_factory=list)
+    submenu: bool = False
+    notice: str = ""
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
@@ -106,6 +111,8 @@ class MenuEvent:
             "category": self.category,
             "item": self.item,
             "categories": self.categories,
+            "submenu": self.submenu,
+            "notice": self.notice,
             "ts": self.ts,
         }
 

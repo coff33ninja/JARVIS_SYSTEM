@@ -11,7 +11,17 @@ import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from xml.sax.saxutils import escape
+from html import escape
+
+try:
+    import defusedxml
+
+    # Harden stdlib XML parsers against XXE and related attacks.
+    # defusedxml is optional in some environments; fail silently if absent.
+    defusedxml.defuse_stdlib()
+except Exception:
+    # Best-effort: if defusedxml isn't available, continue without failing.
+    pass
 
 logger = logging.getLogger(__name__)
 

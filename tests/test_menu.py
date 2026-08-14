@@ -99,3 +99,42 @@ def test_confirm_closes_and_resets():
 def test_item_count_capped_at_research_limit():
     # 16_INTERACTION_RESEARCH: radial breadth above 8 hurts accuracy.
     assert RadialMenu.MAX_ITEMS == 8
+
+
+def test_submenu_push_back_and_active_items():
+    menu = sample_menu()
+    menu.open()
+    menu.select_category(0.0, -1.0)  # screens
+    menu.select_item(0.0, 1.0)  # monitor_2
+    assert menu.active_items() is menu.open_categories[0].items
+    picker = [MenuItem("rebind.pinch", "Pinch"), MenuItem("menu.back", "Back")]
+    assert menu.push(picker) is True
+    assert menu.in_submenu is True
+    assert [i.id for i in menu.active_items()] == ["rebind.pinch", "menu.back"]
+    # Category ring is inert while a submenu owns the inner ring.
+    assert menu.select_category(0.0, -1.0) is None
+    assert menu.select_item(0.0, 1.0) == 1  # selects inside the picker
+    item = menu.confirm()
+    assert item is not None and item.id == "menu.back"
+    assert menu.back() is True
+    assert menu.in_submenu is False
+    assert menu.back() is False  # already at the category layer
+
+
+def test_reopen_returns_confirmed_to_open():
+    menu = sample_menu()
+    menu.open()
+    menu.select_category(0.0, -1.0)
+    menu.select_item(0.0, 1.0)
+    menu.confirm()
+    assert menu.state is MenuState.CONFIRMED
+    menu.reopen()  # stay-open routes (threshold nudges, rebind collisions)
+    assert menu.state is MenuState.OPEN
+    assert menu.reopen() is None  # no-op when not confirmed
+
+
+def test_push_requires_open_menu():
+    menu = sample_menu()
+    assert menu.push([MenuItem("x", "X")]) is False  # closed
+    menu.open()
+    assert menu.push([]) is False  # empty picker rejected

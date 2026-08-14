@@ -93,9 +93,10 @@ scroll are untouched):
    `control.menu_hold_ms` (~250 ms), opens a radial menu on the HUD with
    categories **Modes** (Control / Chat / Transfer / Presentation / Idle),
    **Screens** (per-monitor list + "all"), **Zoom** (in/out), **Tune**
-   (gain / invert quick sliders), and **Gestures** (dynamic bindings — toggle
+   (gain / invert quick sliders), **Gestures** (dynamic bindings — toggle
    any gesture level on/off, rebind a gesture to another action, tune
-   thresholds; see ADR-011). While the menu is open the primary hand
+   thresholds; see ADR-011), and **Thresholds** (per-classification-step
+   tuning; see ADR-011). While the menu is open the primary hand
    drives a highlight via the cursor/reticle, a pinch confirms the selection,
    and an open palm cancels.
 
@@ -109,15 +110,23 @@ scroll are untouched):
 
    Implemented in `ControlPipeline._modifier` + `_menu_frame`; the HUD overlay
    (`hud/index.html`) draws the pie via the `menu` event (category ring + leaf
-   ring, highlight following the reticle). Modes (via `ModeMachine.goto`,
-   which jumps directly — it does not go through the transition table),
-   Screens, Zoom, and Tune execute today. The **Gestures** category is live
-   (ADR-011): each row toggles that action on/off with a checkmark, and the
-   dispatch in `ControlPipeline._dispatch` resolves gestures through the
-   `GestureRegistry` instead of hardcoded branches. Rebind-to-another-action
-   and threshold tuning remain (see ADR-011). This is the "tune or select
-   modes for that scenario" surface, and pulls the *dual-hand / modifier*
-   interaction forward from Phase 6 into Phase 2.
+   ring, highlight following the reticle, in-menu notice toasts for rebind /
+   threshold feedback). Modes (via `ModeMachine.goto`, which jumps directly —
+   it does not go through the transition table), Screens, Zoom, and Tune
+   execute today. The **Gestures** category is live (ADR-011): each row
+   toggles that *gesture's* bindings on/off with a live checkmark, a "Rebind…"
+   row opens a two-level picker (choose the gesture, then the action it points
+   at) that applies live and re-checks the row, and a collision keeps the
+   picker open with an in-menu warning. Rebinding works for any action on the
+   dispatch path because the click/catch edge flags now re-arm per-gesture.
+   The **Thresholds** category is also live: each classification step has an
+   Increase / Decrease / Reset submenu that nudges the live
+   `config/control/*` value and persists it to the config file on save; the
+   hot-path `classify()` calls consume the tuned values each frame. Dispatch
+   in `ControlPipeline._dispatch` resolves gestures through the
+   `GestureRegistry` instead of hardcoded branches. This is the "tune or
+   select modes for that scenario" surface, and pulls the *dual-hand /
+   modifier* interaction forward from Phase 6 into Phase 2.
 
 All three levels are gated on two hands being tracked and are suppressed by
 the two-hand rest-pose guard (a secondary open palm / spread frame stays a

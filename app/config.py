@@ -24,6 +24,17 @@ CONFIG_DIR = Path("config")
 CONFIG_FILE = CONFIG_DIR / "jarvis.yaml"
 
 
+def resolve_config_path(path: str | Path | None = None) -> Path:
+    """Effective config path: explicit argument > ``JARVIS_CONFIG`` env > default.
+
+    Shared by ``AppConfig.load`` and the pipeline's menu persistence so a
+    change saved after a live menu edit lands where the config was loaded from.
+    """
+    if path is None:
+        path = os.getenv("JARVIS_CONFIG", CONFIG_FILE)
+    return Path(path) if path is not None else Path(CONFIG_FILE)
+
+
 @dataclass
 class PerceptionConfig:
     """Webcam + hand-tracking settings (app/perception/)."""
@@ -173,10 +184,8 @@ class AppConfig:
         back to the field default and log a warning. This keeps a stale or
         hand-edited config from bricking the app.
         """
-        if path is None:
-            path = os.getenv("JARVIS_CONFIG", CONFIG_FILE)
         cfg = cls()
-        path = Path(path) if path is not None else Path(CONFIG_FILE)
+        path = resolve_config_path(path)
         if not path.exists():
             return cfg
         try:

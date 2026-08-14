@@ -84,12 +84,25 @@ def test_menu_event_schema():
     assert d["item"] == "mode.chat"
     assert d["categories"][0]["id"] == "modes"
     assert json.dumps(d)  # JSON-safe
+    # Submenu mode hides the category ring behind a single pseudo-category,
+    # and a notice may accompany the payload (ADR-011 rebind/threshold).
+    sub = MenuEvent(
+        state="open",
+        categories=[{"id": "submenu", "label": "", "items": []}],
+        submenu=True,
+        notice="Pinch -> Click Left",
+    ).to_dict()
+    assert sub["submenu"] is True
+    assert sub["categories"][0]["id"] == "submenu"
+    assert sub["notice"] == "Pinch -> Click Left"
     # Closed default: no selection, empty structure.
     closed = MenuEvent().to_dict()
     assert closed["state"] == "closed"
     assert closed["category"] == ""
     assert closed["item"] == ""
     assert closed["categories"] == []
+    assert closed["submenu"] is False
+    assert closed["notice"] == ""
 
 
 def test_monitors_event_active_monitor_field():

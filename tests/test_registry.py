@@ -80,3 +80,55 @@ def test_duplicate_register_with_disabled_is_allowed():
     r = GestureRegistry()
     r.add(GestureBinding("a", "pinch", enabled=False))
     assert r.add(GestureBinding("b", "pinch")) is True
+
+
+def test_rebind_swaps_wildcard_action_and_preserves_enabled():
+    r = GestureRegistry(DEFAULT_BINDINGS)
+    ok, reason = r.rebind("pinch", "cancel")
+    assert ok and reason == ""
+    assert r.resolve("pinch", None) == "cancel"
+    # Pinch bindings for other modes are untouched.
+    assert r.resolve("pinch", "chat") == "cancel"  # wildcard covers it
+
+
+def test_rebind_to_current_action_is_noop_success():
+    r = GestureRegistry(DEFAULT_BINDINGS)
+    ok, reason = r.rebind("pinch", "click.left")
+    assert ok and reason == ""
+
+
+def test_rebind_rejects_claimed_mode_key():
+    r = GestureRegistry(DEFAULT_BINDINGS)
+    # pinch already owns the wildcard; a mode-specific rebind onto a second
+    # action must be refused so resolve() precedence stays unambiguous.
+    ok, reason = r.rebind("pinch", "scroll.tick", mode="chat")
+    assert not ok
+    assert "already bound" in reason
+    assert r.resolve("pinch", "chat") == "click.left"
+
+
+def test_rebind_mints_binding_when_key_free():
+    r = GestureRegistry(DEFAULT_BINDINGS)
+    ok, reason = r.rebind("wave", "click.left")  # unbound gesture, key is free
+    assert ok and reason == ""
+    assert r.resolve("wave", None) == "click.left"
+    assert len(r) == len(DEFAULT_BINDINGS) + 1
+
+
+def test_set_gesture_enabled_flips_all_bindings_for_gesture():
+    r = GestureRegistry(DEFAULT_BINDINGS)
+    # open_palm binds per-mode (catch + release): both flip together.
+    assert r.gesture_enabled("open_palm") is True
+    assert r.set_gesture_enabled("open_palm", False) is True
+    assert r.gesture_enabled("open_palm") is False
+    assert r.resolve("open_palm", "transfer") is None
+    assert r.resolve("open_palm", "chat") is None
+    assert r.set_gesture_enabled("open_palm", True) is True
+    assert r.resolve("open_palm", "transfer") == "catch"
+    assert r.set_gesture_enabled("nope", True) is False  # unknown gesture
+
+
+def test_by_gesture_lists_bindings():
+    r = GestureRegistry(DEFAULT_BINDINGS)
+    assert [b.action_id for b in r.by_gesture("open_palm")] == ["catch", "release"]
+    assert r.by_gesture("nope") == []

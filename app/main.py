@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cv2
 
 from app.calibrate.server import CalibrationConfig, CalibrationServer
-from app.config import AppConfig
+from app.config import AppConfig, resolve_config_path
 from app.control.virtual_keyboard import MediaController, VirtualKeyboard
 from app.control.virtual_mouse import VirtualMouse
 from app.hud.hud_server import HUDConfig, HUDServer
@@ -59,7 +59,13 @@ def build_pipeline(
         if server.start():
             hud = server
     mouse = VirtualMouse(failsafe=cfg.control.failsafe)
-    return ControlPipeline(config=cfg, hud=hud, mouse=mouse, on_attention=on_attention)
+    return ControlPipeline(
+        config=cfg,
+        hud=hud,
+        mouse=mouse,
+        on_attention=on_attention,
+        config_path=resolve_config_path(args.config),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

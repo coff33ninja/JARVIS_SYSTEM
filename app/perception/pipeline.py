@@ -11,9 +11,10 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from pathlib import Path
 
-from ..config import AppConfig
+from ..config import AppConfig, resolve_config_path
 from ..control.menu import MenuCategory, MenuItem, MenuState, RadialMenu
 from ..control.modes import Mode, ModeMachine
 from ..control.registry import DEFAULT_BINDINGS, GestureRegistry
@@ -27,6 +28,7 @@ from ..hud.events import (
 )
 from .camera import Camera
 from .geometry import (
+    GeometryConfig,
     classify,
     extended_finger_count,
     is_circle_trace,
@@ -39,6 +41,45 @@ from .zones import LateralZone, lateral_zone
 logger = logging.getLogger(__name__)
 
 GESTURE_NONE = "none"
+
+# Edge-triggered gestures: their bound actions fire once per stable onset and
+# need per-gesture re-arm (ADR-011) so an arbitrary rebind can't re-fire every
+# frame. Primed (False) while the gesture is absent; fired (True) once the
+# bound action consumed the onset.
+EDGE_GESTURES = (
+    "pinch",
+    "two_finger_pinch",
+    "thumbs_up",
+    "thumbs_down",
+    "open_palm",
+)
+EDGE_ACTIONS = ("click.left", "click.right", "confirm", "cancel", "catch", "release")
+
+# Gestures shown in the Gestures menu (rebind / toggle). "attention" (circle)
+# and "mode.transfer_toggle" (spread) dispatch outside _dispatch, so binding
+# them from the menu would lie.
+DISPATCHABLE_GESTURES = (
+    "point",
+    "pinch",
+    "two_finger_pinch",
+    "fist",
+    "v_sign",
+    "thumbs_up",
+    "thumbs_down",
+)
+
+# Tunable classification thresholds (04_GESTURE_VOCABULARY "Tune"). Each entry
+# is (label, step, min, max); the value lives on config.control under the same
+# name. pinch_threshold / two_finger_pinch_threshold were previously ignored
+# by classify() in the hot path — the pipeline now passes them through.
+THRESHOLDS = {
+    "pinch_threshold": ("Pinch", 0.01, 0.0, 0.5),
+    "two_finger_pinch_threshold": ("Two-finger pinch", 0.01, 0.0, 0.5),
+    "scroll_threshold": ("Scroll", 0.005, 0.001, 0.5),
+    "swipe_threshold_px": ("Swipe distance", 25.0, 50.0, 2000.0),
+    "two_hand_spread_threshold": ("Two-hand spread", 0.05, 0.05, 1.0),
+    "two_hand_zoom_threshold": ("Two-hand zoom", 0.01, 0.005, 1.0),
+}
 
 
 @dataclass
@@ -100,8 +141,10 @@ class ControlPipeline:
         frame_source: Callable[[], object] | None = None,
         on_attention: Callable[[], None] | None = None,
         registry: GestureRegistry | None = None,
+        config_path: str | Path | None = None,
     ):
         self.config = config or AppConfig()
+        self._config_path = config_path
         self.camera = camera or Camera(
             self.config.perception.camera_index,
             self.config.perception.width,
@@ -123,11 +166,8 @@ class ControlPipeline:
 
         self.stats = PipelineStats()
         self._smoothing = None  # built lazily to keep imports light
-        self._prev_pinch = False
-        self._prev_two_pinch = False
-        self._prev_thumbs_up = False
-        self._prev_thumbs_down = False
-        self._prev_open_palm = False
+        # Per-gesture edge arming (ADR-011 rebind): False = primed, True = fired.
+        self._edge_armed: dict[str, bool] = {g: False for g in EDGE_GESTURES}
         self._spread_active = False
         self._spread_frames = 0
         self._zoom_ref: float | None = None
@@ -155,6 +195,7 @@ class ControlPipeline:
         self._registry = registry or GestureRegistry(DEFAULT_BINDINGS)
         self._menu = self._build_menu()
         self._menu_open_at = 0.0
+        self._menu_notice = ""
         self._mod_fist_start = 0.0
         self._mod_zone: LateralZone | None = None
         self._mod_zone_start = 0.0
@@ -228,14 +269,65 @@ class ControlPipeline:
         )
         gesture_items = [
             MenuItem(
-                action_id,
-                self._action_label(action_id),
+                f"gesture.{g}",
+                self._action_label(g),
                 action_id="gesture.toggle",
-                params={"action": action_id},
-                checked=all(b.enabled for b in self._registry.by_action(action_id)),
+                params={"gesture": g},
+                checked=self._registry.gesture_enabled(g),
             )
-            for action_id in self.DISPATCH_ACTIONS
-            if self._registry.by_action(action_id)
+            for g in DISPATCHABLE_GESTURES
+        ]
+        gesture_items.append(
+            MenuItem(
+                "gesture.rebind",
+                "Rebind…",
+                action_id="gesture.rebind",
+                params={},
+                submenu=[
+                    MenuItem(
+                        f"rebind.{g}",
+                        self._action_label(g),
+                        action_id="gesture.rebind",
+                        params={"gesture": g},
+                        submenu=self._rebind_actions(g),
+                    )
+                    for g in DISPATCHABLE_GESTURES
+                ]
+                + [MenuItem("menu.back", "Back", action_id="menu.back")],
+            )
+        )
+        threshold_items = [
+            MenuItem(
+                f"threshold.{key}",
+                f"{label} {float(getattr(self.config.control, key)):.3f}".rstrip(
+                    "0"
+                ).rstrip("."),
+                action_id="threshold.open",
+                params={"key": key},
+                submenu=[
+                    MenuItem(
+                        f"threshold.{key}.up",
+                        "Increase",
+                        action_id="threshold.step",
+                        params={"key": key, "delta": step},
+                    ),
+                    MenuItem(
+                        f"threshold.{key}.down",
+                        "Decrease",
+                        action_id="threshold.step",
+                        params={"key": key, "delta": -step},
+                    ),
+                    MenuItem(
+                        f"threshold.{key}.reset",
+                        "Reset",
+                        action_id="threshold.reset",
+                        params={"key": key},
+                    ),
+                    MenuItem("menu.back", "Back", action_id="menu.back"),
+                ],
+            )
+            for key, (label, step, _lo, _hi) in THRESHOLDS.items()
+            if hasattr(self.config.control, key)
         ]
         return RadialMenu(
             [
@@ -302,8 +394,24 @@ class ControlPipeline:
                     ],
                 ),
                 MenuCategory("gestures", "Gestures", items=gesture_items),
+                MenuCategory("thresholds", "Thresholds", items=threshold_items),
             ]
         )
+
+    def _rebind_actions(self, gesture: str) -> list[MenuItem]:
+        """Submenu of actions a gesture's wildcard binding can point at."""
+        items = [
+            MenuItem(
+                f"rebind.{gesture}.{a}",
+                self._action_label(a),
+                action_id="gesture.rebind",
+                params={"gesture": gesture, "action": a},
+                checked=self._registry.resolve(gesture, None) == a,
+            )
+            for a in self.DISPATCH_ACTIONS
+        ]
+        items.append(MenuItem("menu.back", "Back", action_id="menu.back"))
+        return items
 
     # ------------------------------------------------------------------ #
     # guided calibration (app/calibrate/session.py)
@@ -366,7 +474,7 @@ class ControlPipeline:
 
         self._spread(result)
         self._two_hand_zoom(result, actions)
-        pose = classify(lmks)
+        pose = classify(lmks, self._geometry())
         self._emit(result, pose)
         # Modifier hand: fist menu + monitor selection. While the menu is open
         # it owns the frame — the primary pinch confirms instead of clicking,
@@ -407,6 +515,10 @@ class ControlPipeline:
                     return lmks
         return hands[0]
 
+    def _geometry(self) -> GeometryConfig:
+        """GeometryConfig mirroring live control thresholds (menu tuning)."""
+        return GeometryConfig.from_control(self.config.control)
+
     def _modifier_hand(self, result) -> ModifierInfo | None:
         """State of the secondary hand, or None when there is no modifier.
 
@@ -427,7 +539,7 @@ class ControlPipeline:
                 break
         if secondary is None:
             return None
-        pose = classify(secondary)
+        pose = classify(secondary, self._geometry())
         return ModifierInfo(
             finger_count=0 if pose.fist else extended_finger_count(secondary),
             fist=pose.fist,
@@ -501,6 +613,8 @@ class ControlPipeline:
             and self._menu.open()
         ):
             self._menu_open_at = now
+            self._menu_notice = ""
+            self._edge_armed["pinch"] = False
             self._menu_dirty = True
             actions.append(PipelineAction("menu.open", gesture="fist"))
         return True
@@ -642,19 +756,51 @@ class ControlPipeline:
             sx, sy = self.mapper.to_screen(*pose.index_xy)
             sx0, sy0, sw, sh = self.mapper.screen
             dx, dy = sx - (sx0 + sw / 2.0), sy - (sy0 + sh / 2.0)
-            self._menu.select_category(dx, dy)
-            self._menu.select_item(dx, dy)
+            if self._menu.in_submenu:
+                self._menu.select_item(dx, dy)
+            else:
+                self._menu.select_category(dx, dy)
+                self._menu.select_item(dx, dy)
             self._menu_dirty = True
-        if pose is not None and pose.pinch and not self._prev_pinch:
+        if pose is not None and pose.pinch and not self._edge_armed["pinch"]:
             item = self._menu.confirm()
             if item is not None:
-                self._menu.close()
-                self._prev_pinch = True
+                self._edge_armed["pinch"] = True
                 self._menu_dirty = True
                 actions.append(PipelineAction("menu.confirm", gesture="pinch"))
-                executed = self._execute_menu_item(item)
-                if executed is not None:
-                    actions.append(executed)
+                if self._menu_confirm(item, actions):
+                    self._menu.close()
+
+    def _menu_confirm(self, item: MenuItem, actions: list[PipelineAction]) -> bool:
+        """Route a confirmed leaf. Returns True to close the menu.
+
+        Ordinary leaves execute and close. An item with a ``submenu`` pushes it
+        (the rebind / threshold picker) and stays open; ``menu.back`` pops a
+        submenu level. Rebind and threshold rows stay open where a collision or
+        repeated nudging makes that useful (ADR-011).
+        """
+        pid = item.action_id
+        if pid == "menu.back":
+            self._menu.back()
+            return False
+        if item.submenu:
+            self._menu.push(item.submenu)
+            self._menu_notice = ""
+            return False
+        if pid == "gesture.rebind":
+            close = self._apply_rebind(item, actions)
+            if not close:
+                self._menu.reopen()  # collision: keep the picker open to retry
+            return close
+        if pid in ("threshold.step", "threshold.reset"):
+            close = self._apply_threshold(item, actions)  # always stays open
+            if not close:
+                self._menu.reopen()  # stay open for repeat nudges
+            return close
+        executed = self._execute_menu_item(item)
+        if executed is not None:
+            actions.append(executed)
+        return True
 
     def _execute_menu_item(self, item: MenuItem) -> PipelineAction | None:
         """Run a confirmed menu leaf. Returns the action (if any)."""
@@ -683,20 +829,93 @@ class ControlPipeline:
         return None
 
     def _toggle_gesture(self, item: MenuItem) -> PipelineAction | None:
-        """Flip an action's enabled state (Gestures menu row, ADR-011)."""
-        action_id = item.params.get("action")
-        if not action_id or not self._registry.by_action(action_id):
+        """Flip a gesture's bindings on/off (Gestures menu row, ADR-011)."""
+        gesture = item.params.get("gesture")
+        if not gesture or not self._registry.by_gesture(gesture):
             return None
-        target = not all(b.enabled for b in self._registry.by_action(action_id))
-        self._registry.set_enabled(action_id, target)
-        # Refresh the stored checkmark so the next broadcast shows the new
-        # state (the menu's categories survive close/reopen).
+        target = not self._registry.gesture_enabled(gesture)
+        self._registry.set_gesture_enabled(gesture, target)
         for cat in self._menu.categories:
             for it in cat.items:
-                if it.id == action_id:
+                if it.id == item.id:
                     it.checked = target
         self._menu_dirty = True
-        return PipelineAction("gesture.toggle", (action_id, target), gesture="menu")
+        return PipelineAction("gesture.toggle", (gesture, target), gesture="menu")
+
+    def _apply_rebind(self, item: MenuItem, actions: list[PipelineAction]) -> bool:
+        """Point a gesture's wildcard binding at a new action (ADR-011).
+
+        Returns True when the menu should close (rebind applied), False when it
+        must stay open (the target key is already claimed — surface the reason
+        as an in-menu notice).
+        """
+        gesture = item.params.get("gesture")
+        action_id = item.params.get("action")
+        if not gesture or not action_id:
+            return True
+        ok, reason = self._registry.rebind(gesture, action_id)
+        if not ok:
+            self._menu_notice = reason
+            return False
+        self._menu_notice = (
+            f"{self._action_label(gesture)} -> {self._action_label(action_id)}"
+        )
+        self._refresh_gesture_rows()
+        self._menu_dirty = True
+        actions.append(
+            PipelineAction("gesture.rebind", (gesture, action_id), gesture="menu")
+        )
+        self._persist_config(actions)
+        return True
+
+    def _apply_threshold(self, item: MenuItem, actions: list[PipelineAction]) -> bool:
+        """Nudge or reset a classification threshold; stays open for nudges.
+
+        Returns True when the menu should close (never for threshold rows) —
+        kept boolean so callers route uniformly.
+        """
+        key = item.params.get("key")
+        if key not in THRESHOLDS or not hasattr(self.config.control, key):
+            return True
+        _label, _step, lo, hi = THRESHOLDS[key]
+        cfg = self.config.control
+        if item.action_id == "threshold.reset":
+            default = next(
+                (f.default for f in fields(cfg) if f.name == key),
+                getattr(cfg, key),
+            )
+            value = float(default)
+        else:
+            delta = float(item.params.get("delta", 0.0))
+            value = min(hi, max(lo, float(getattr(cfg, key)) + delta))
+        setattr(cfg, key, value)
+        for cat in self._menu.categories:
+            for it in cat.items:
+                if it.id == f"threshold.{key}":
+                    it.label = f"{_label} {value:.3f}".rstrip("0").rstrip(".")
+        self._menu_notice = f"{_label}: {value:.3f}".rstrip("0").rstrip(".")
+        self._menu_dirty = True
+        actions.append(PipelineAction("threshold.step", (key, value), gesture="menu"))
+        self._persist_config(actions)
+        return False
+
+    def _refresh_gesture_rows(self) -> None:
+        """Re-check the Gestures toggle rows after a rebind."""
+        for cat in self._menu.categories:
+            if cat.id != "gestures":
+                continue
+            for it in cat.items:
+                if it.action_id == "gesture.toggle":
+                    it.checked = self._registry.gesture_enabled(it.params["gesture"])
+
+    def _persist_config(self, actions: list[PipelineAction]) -> None:
+        """Persist live control edits to the config file (menu Thresholds)."""
+        if self._config_path is None:
+            return  # test rigs: nothing on disk to keep in sync
+        try:
+            self.config.save(resolve_config_path(self._config_path))
+        except OSError as exc:
+            logger.warning("config persistence failed: %s", exc)
 
     def _tune(self, param: str) -> PipelineAction | None:
         """Apply a Tune-category adjustment (gain / invert), live."""
@@ -765,7 +984,10 @@ class ControlPipeline:
             self._zoom_ref = None
             self._zoom_accum = 0.0
             return
-        if not (classify(hands[0]).pinch and classify(hands[1]).pinch):
+        if not (
+            classify(hands[0], self._geometry()).pinch
+            and classify(hands[1], self._geometry()).pinch
+        ):
             self._zoom_ref = None
             self._zoom_accum = 0.0
             return
@@ -802,7 +1024,7 @@ class ControlPipeline:
         hands = result.hands or []
         if len(hands) < 2 or pose.name not in ("open_palm", "none"):
             return False
-        return classify(hands[1]).name in ("open_palm", "none")
+        return classify(hands[1], self._geometry()).name in ("open_palm", "none")
 
     def _circle(self, pose) -> list[PipelineAction]:
         """Index-trace circle -> attention ("Jarvis"). Works in any mode.
@@ -856,19 +1078,11 @@ class ControlPipeline:
             return actions
         if gesture != "v_sign":
             self._v_sign_active = False
-        # Edge-trigger the thumb gestures: arm them only while off.
-        if gesture != "thumbs_up":
-            self._prev_thumbs_up = False
-        if gesture != "thumbs_down":
-            self._prev_thumbs_down = False
-        if gesture != "open_palm":
-            self._prev_open_palm = False
-        # Same re-arm for the pinch clicks: leaving the pinch (even briefly)
-        # must re-arm it so the next pinch clicks again.
-        if gesture != "pinch":
-            self._prev_pinch = False
-        if gesture != "two_finger_pinch":
-            self._prev_two_pinch = False
+        # Edge-trigger the thumb/pinch gestures: re-arm anything that left, so
+        # a rebind to any edge action fires once per stable onset (ADR-011).
+        for g in EDGE_GESTURES:
+            if gesture != g:
+                self._edge_armed[g] = False
 
         # Leaving "fist" releases an active drag (fist = hold, release = drop).
         if self._dragging and gesture != "fist":
@@ -884,9 +1098,8 @@ class ControlPipeline:
         # Resolve the gesture through the binding registry (ADR-011) and run
         # the bound action. Seed bindings mirror the old hardcoded branches,
         # so behavior is unchanged; toggling a binding off leaves the gesture
-        # inert without touching the code. Arbitrary rebind (gesture -> a
-        # different action) still needs per-gesture edge re-arm and lands in a
-        # later slice.
+        # inert without touching the code. Rebinding (menu "Rebind…") reuses
+        # the same resolve path thanks to the per-gesture edge re-arm above.
         action_id = self._registry.resolve(gesture, mode.value)
         return self._run_action(action_id, gesture, pose, actions)
 
@@ -896,39 +1109,40 @@ class ControlPipeline:
         """Execute the resolved action. None = unbound/disabled gesture."""
         if action_id is None:
             return actions
+        edge = gesture if gesture in EDGE_GESTURES else None
         if action_id == "cursor.move":
             sx, _sy = self._move_cursor(pose.index_xy, actions)
             self._swipe(sx, actions)
         elif action_id == "click.left":
             if self._calibration_armed and self._calibration_capture is not None:
-                if not self._prev_pinch:  # edge: one capture per pinch
+                if edge is None or not self._edge_armed[edge]:
                     self._calibration_capture(*pose.index_xy)
-                    self._prev_pinch = True
+                    if edge is not None:
+                        self._edge_armed[edge] = True
             else:
-                actions.extend(self._pinch(pose.index_xy))
+                actions.extend(self._pinch(pose.index_xy, edge, gesture))
         elif action_id == "click.right":
-            actions.extend(self._two_finger_pinch(pose.index_xy))
+            actions.extend(self._two_finger_pinch(pose.index_xy, edge, gesture))
         elif action_id == "drag.toggle":
             actions.extend(self._fist(pose.index_xy))
         elif action_id == "scroll.tick":
             self._scroll(pose, actions)
-        elif action_id == "confirm":
-            if not self._prev_thumbs_up:
-                actions.append(PipelineAction("confirm", gesture=gesture))
-            self._prev_thumbs_up = True
-        elif action_id == "cancel":
-            if not self._prev_thumbs_down:
-                actions.append(PipelineAction("cancel", gesture=gesture))
-            self._prev_thumbs_down = True
-        elif action_id == "catch":
-            if not self._prev_open_palm:
-                actions.append(PipelineAction("catch", gesture=gesture))
-            self._prev_open_palm = True
-        elif action_id == "release":
-            if not self._prev_open_palm:
-                actions.append(PipelineAction("release", gesture=gesture))
-            self._prev_open_palm = True
+        elif action_id in ("confirm", "cancel", "catch", "release"):
+            self._edge_action(action_id, edge, gesture, actions)
         return actions
+
+    def _edge_action(
+        self,
+        action_id: str,
+        edge: str | None,
+        gesture: str,
+        actions: list[PipelineAction],
+    ) -> None:
+        """Fire a confirm/cancel/catch/release edge once per arming."""
+        if edge is None or not self._edge_armed[edge]:
+            actions.append(PipelineAction(action_id, gesture=gesture))
+            if edge is not None:
+                self._edge_armed[edge] = True
 
     def _on_disallowed(self, gesture: str) -> None:
         """Clean up transient state when the current gesture can't act."""
@@ -936,16 +1150,9 @@ class ControlPipeline:
         self._gesture_frames = 0
         if gesture != "v_sign":
             self._v_sign_active = False
-        if gesture != "thumbs_up":
-            self._prev_thumbs_up = False
-        if gesture != "thumbs_down":
-            self._prev_thumbs_down = False
-        if gesture != "open_palm":
-            self._prev_open_palm = False
-        if gesture != "pinch":
-            self._prev_pinch = False
-        if gesture != "two_finger_pinch":
-            self._prev_two_pinch = False
+        for g in EDGE_GESTURES:
+            if gesture != g:
+                self._edge_armed[g] = False
 
     def _hold_stable(self, gesture: str) -> bool:
         if gesture == self._last_gesture:
@@ -975,22 +1182,29 @@ class ControlPipeline:
         x, y = self._smoothing(index_xy)
         return self.mapper.to_screen(x, y)
 
-    def _pinch(self, index_xy) -> list[PipelineAction]:
+    def _pinch(
+        self, index_xy, edge: str | None = None, gesture: str = "pinch"
+    ) -> list[PipelineAction]:
         actions: list[PipelineAction] = []
-        if not self._prev_pinch:  # edge trigger: click once on gesture start
+        if edge is None or not self._edge_armed[edge]:
+            # edge trigger: click once on gesture start (ADR-011 rebind-aware)
             self._move_cursor(index_xy, actions)
             self.mouse.click(button="left")
-            actions.append(PipelineAction("left_click", gesture="pinch"))
-        self._prev_pinch = True
+            actions.append(PipelineAction("left_click", gesture=gesture))
+            if edge is not None:
+                self._edge_armed[edge] = True
         return actions
 
-    def _two_finger_pinch(self, index_xy) -> list[PipelineAction]:
+    def _two_finger_pinch(
+        self, index_xy, edge: str | None = None, gesture: str = "two_finger_pinch"
+    ) -> list[PipelineAction]:
         actions: list[PipelineAction] = []
-        if not self._prev_two_pinch:
+        if edge is None or not self._edge_armed[edge]:
             self._move_cursor(index_xy, actions)
             self.mouse.right_click()
-            actions.append(PipelineAction("right_click", gesture="two_finger_pinch"))
-        self._prev_two_pinch = True
+            actions.append(PipelineAction("right_click", gesture=gesture))
+            if edge is not None:
+                self._edge_armed[edge] = True
         return actions
 
     def _fist(self, index_xy) -> list[PipelineAction]:
@@ -1069,11 +1283,7 @@ class ControlPipeline:
     def _on_hand_lost(self) -> None:
         self._smoothing = None
         self._status_gesture = ""
-        self._prev_pinch = False
-        self._prev_two_pinch = False
-        self._prev_thumbs_up = False
-        self._prev_thumbs_down = False
-        self._prev_open_palm = False
+        self._edge_armed = {g: False for g in EDGE_GESTURES}
         self._spread_active = False
         self._spread_frames = 0
         self._zoom_ref = None
@@ -1130,6 +1340,7 @@ class ControlPipeline:
         if self.hud is None:
             return
         cats = self._menu.open_categories
+        submenu = self._menu.in_submenu
         category = ""
         item = ""
         if (
@@ -1137,28 +1348,45 @@ class ControlPipeline:
             and cats
             and 0 <= self._menu.category_idx < len(cats)
         ):
-            category = cats[self._menu.category_idx].id
-            items = cats[self._menu.category_idx].items
+            if not submenu:
+                category = cats[self._menu.category_idx].id
+            items = self._menu.active_items()
             if self._menu.item_idx is not None and 0 <= self._menu.item_idx < len(
                 items
             ):
                 item = items[self._menu.item_idx].id
+        if submenu:
+            # A submenu owns the ring: broadcast it alone, no category ring.
+            payload = [
+                {
+                    "id": "submenu",
+                    "label": "",
+                    "items": [
+                        {"id": i.id, "label": i.label, "checked": i.checked}
+                        for i in self._menu.active_items()
+                    ],
+                }
+            ]
+        else:
+            payload = [
+                {
+                    "id": c.id,
+                    "label": c.label,
+                    "items": [
+                        {"id": i.id, "label": i.label, "checked": i.checked}
+                        for i in c.items
+                    ],
+                }
+                for c in cats
+            ]
         self.hud.broadcast(
             MenuEvent(
                 state=self._menu.state.value,
                 category=category,
                 item=item,
-                categories=[
-                    {
-                        "id": c.id,
-                        "label": c.label,
-                        "items": [
-                            {"id": i.id, "label": i.label, "checked": i.checked}
-                            for i in c.items
-                        ],
-                    }
-                    for c in cats
-                ],
+                categories=payload,
+                submenu=submenu,
+                notice=self._menu_notice,
             )
         )
         self._menu_dirty = False

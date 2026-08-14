@@ -29,6 +29,12 @@
                border-radius: 4px; }
   #calib { position: fixed; right: 16px; bottom: 12px; z-index: 2; opacity: .6;
            color: #6ee7ff; font-size: 11px; text-decoration: none; }
+  #menu-notice { position: fixed; left: 50%; bottom: 12%; transform: translateX(-50%);
+           z-index: 3; color: #e9fbff; font-size: 15px; font-weight: 600;
+           background: rgba(0,0,0,.55); border: 1px solid rgba(110,231,255,.5);
+           border-radius: 6px; padding: 8px 18px; text-shadow: 0 0 6px rgba(110,231,255,.5);
+           opacity: 0; transition: opacity .25s ease; pointer-events: none; }
+  #menu-notice.show { opacity: 1; }
 </style>
 </head>
 <body>
@@ -38,6 +44,7 @@
     <div id="retMon"></div></div>
   <canvas id="skeleton"></canvas>
   <canvas id="menu"></canvas>
+  <div id="menu-notice"></div>
   <a id="calib" href="http://127.0.0.1:8766/" target="_blank">calibrate</a>
 <script>
 (function () {
@@ -159,9 +166,11 @@
     const cx = w / 2, cy = h / 2;
     const R = Math.min(w, h) * 0.34;
     const rItem = R * 0.56;   // inner edge of the category ring
-    const n = cats.length;
+    const submenu = !!menuData.submenu;
+    const n = submenu ? 0 : cats.length;
     const labelR = (R + rItem) / 2;
 
+    // Category ring is hidden while a submenu owns the inner ring.
     for (let i = 0; i < n; i++) {
       const a0 = -Math.PI / 2 + i * 2 * Math.PI / n;
       const a1 = a0 + 2 * Math.PI / n;
@@ -181,17 +190,20 @@
         cx + Math.cos(am) * labelR, cy + Math.sin(am) * labelR);
     }
 
-    // Leaf items inside the highlighted category (second layer).
-    const cat = cats.find(c => c.id === menuData.category);
-    const items = (cat && cat.items) || [];
+    // Leaf items: the active submenu, else the highlighted category.
+    // In submenu mode the backend sends one pseudo-category whose items ARE
+    // the picker rows (rebind actions / threshold nudges) plus a Back row.
+    const items = submenu ? ((cats[0] && cats[0].items) || [])
+                          : ((cats.find(c => c.id === menuData.category) || {}).items || []);
     if (items.length > 1) {
+      const ring = submenu ? rItem : rItem * 0.92;
       for (let j = 0; j < items.length; j++) {
         const a0 = -Math.PI / 2 + j * 2 * Math.PI / items.length;
         const a1 = a0 + 2 * Math.PI / items.length;
         const am = (a0 + a1) / 2;
         const sel = items[j].id === menuData.item;
         menuCtx.fillStyle = sel ? `rgba(${ACCENT},.40)` : `rgba(${ACCENT},.12)`;
-        pieSector(cx, cy, 0, rItem * 0.92, a0, a1);
+        pieSector(cx, cy, 0, ring, a0, a1);
         menuCtx.fill();
         menuCtx.strokeStyle = `rgba(${ACCENT},.7)`;
         menuCtx.lineWidth = 1;
@@ -199,7 +211,7 @@
         menuCtx.fillStyle = sel ? '#ffffff' : '#a8dde8';
         menuCtx.font = `${sel ? 13 : 11}px "Segoe UI", sans-serif`;
         menuCtx.fillText((items[j].checked ? '\u2713 ' : '') + items[j].label,
-          cx + Math.cos(am) * rItem * 0.46, cy + Math.sin(am) * rItem * 0.46);
+          cx + Math.cos(am) * ring * 0.46, cy + Math.sin(am) * ring * 0.46);
       }
     }
     menuCtx.fillStyle = `rgba(${ACCENT},.9)`;
@@ -209,6 +221,16 @@
   }
 
   let ws = null, reconn = 0;
+  let noticeTimer = null;
+  function showNotice(text) {
+    const el = document.getElementById('menu-notice');
+    if (!el) return;
+    if (!text) { el.classList.remove('show'); return; }
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}`);
@@ -229,6 +251,7 @@
         drawMap(-1);
       } else if (msg.type === 'menu') {
         menuData = msg;
+        showNotice(msg.notice || '');
         drawMenu();
       } else if (msg.type === 'status') {
         const g = GESTURE_NAMES[msg.gesture] || '';

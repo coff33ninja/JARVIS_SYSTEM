@@ -8,9 +8,10 @@ resolvable at runtime instead of baked into code.
 
 This is the data model plus the resolution `ControlPipeline` dispatch
 consults (ADR-011): the seed bindings mirror today's hardcoded dispatch so
-the registry can replace it without changing behavior. The Gestures menu row
-toggles an action on/off via ``set_enabled``; rebind-to-another-action and
-threshold tuning are deferred.
+the registry can replace it without changing behavior. The Gestures menu
+toggles a row on/off via ``set_gesture_enabled`` and rebinds a gesture to
+another action via ``rebind``; classification thresholds tune in the
+pipeline's Thresholds menu.
 """
 
 from __future__ import annotations
@@ -97,6 +98,46 @@ class GestureRegistry:
                 found = True
         return found
 
+    def set_gesture_enabled(self, gesture: str, enabled: bool) -> bool:
+        """Toggle every binding for a gesture (Gestures menu row, ADR-011).
+
+        False when the gesture is unknown, so a stale row can't silently no-op.
+        """
+        found = False
+        for binding in self._bindings:
+            if binding.gesture == gesture:
+                binding.enabled = enabled
+                found = True
+        return found
+
+    def gesture_enabled(self, gesture: str) -> bool:
+        """True when any binding for the gesture is enabled."""
+        return any(b.enabled for b in self._bindings if b.gesture == gesture)
+
+    def rebind(
+        self, gesture: str, action_id: str, mode: str | None = None
+    ) -> tuple[bool, str]:
+        """Point the ``(gesture, mode)`` binding at a new action.
+
+        Returns ``(True, "")`` on success and ``(False, reason)`` when the key
+        is already claimed by a different binding — the menu surfaces ``reason``
+        as its in-menu collision warning. Rebinding to the current action is a
+        no-op success. A missing binding is created (respecting the uniqueness
+        invariant via ``add``), so a rebind can also mint a fresh gesture row.
+        Enabled state and params are preserved when the binding already exists.
+        """
+        for binding in self._bindings:
+            if binding.gesture != gesture or binding.mode != mode:
+                continue
+            if binding.action_id == action_id:
+                return True, ""
+            binding.action_id = action_id
+            return True, ""
+        ok = self.add(GestureBinding(action_id, gesture, mode=mode))
+        if not ok:
+            return False, f"'{gesture}' already bound in {mode or 'any mode'}"
+        return True, ""
+
     # ------------------------------------------------------------------ #
     # query
     # ------------------------------------------------------------------ #
@@ -119,6 +160,9 @@ class GestureRegistry:
 
     def by_action(self, action_id: str) -> list[GestureBinding]:
         return [b for b in self._bindings if b.action_id == action_id]
+
+    def by_gesture(self, gesture: str) -> list[GestureBinding]:
+        return [b for b in self._bindings if b.gesture == gesture]
 
     def bindings(self) -> list[GestureBinding]:
         return list(self._bindings)
