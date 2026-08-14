@@ -97,14 +97,31 @@ scroll are untouched):
    any gesture level on/off, rebind a gesture to another action, tune
    thresholds; see ADR-011). While the menu is open the primary hand
    drives a highlight via the cursor/reticle, a pinch confirms the selection,
-   and an open palm cancels. The menu closes on fist release, selection, or
-   timeout (`control.menu_timeout_ms`). This is the "tune or select modes for
-   that scenario" surface, and pulls the *dual-hand / modifier* interaction
-   forward from Phase 6 into Phase 2.
+   and an open palm cancels.
+
+   The menu is **sticky** once opened: the trigger fist is a momentary
+   trigger, so it can relax while the primary hand interacts. It closes on
+   **pinch-confirm**, **either-hand open-palm cancel**, **timeout**
+   (`control.menu_timeout_ms`), or **hand loss** — never on fist release
+   (you can't hold a fist *and* open-palm cancel with the same hand). While
+   the menu is open it owns the frame: gesture dispatch (click/catch/release)
+   is suspended so the confirming pinch can't also fire a click.
+
+   Implemented in `ControlPipeline._modifier` + `_menu_frame`. Modes
+   (via `ModeMachine.goto`, which jumps directly — it does not go through the
+   transition table), Screens, Zoom, and Tune execute today; the Gestures
+   category lands with the registry-dispatch slice. This is the "tune or
+   select modes for that scenario" surface, and pulls the *dual-hand /
+   modifier* interaction forward from Phase 6 into Phase 2.
 
 All three levels are gated on two hands being tracked and are suppressed by
 the two-hand rest-pose guard (a secondary open palm / spread frame stays a
-spread, never a monitor selection).
+spread, never a monitor selection). Finger-count selection is edge-triggered
+and debounced by `control.hold_frames`, so finger jitter (1 vs 2) can't
+re-fire. Passive-zone selection fires once per held zone and only when the
+target differs from the current monitor; `control.zone_hold_ms` of 0 disables
+the level entirely. Fist owns the frame — while the secondary hand is a fist,
+zone/count selection is dropped, and the menu has priority over both.
 
 ### Collision defaults (decided; remappable in the Gestures menu)
 

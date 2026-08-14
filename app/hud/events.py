@@ -30,11 +30,12 @@ class ReticleEvent:
     x: float
     y: float
     monitor: int = 0  # index of the monitor the point lands on (-1 = none)
+    zone: str = ""  # named region: "monitor_N", "left_screen", "right_screen", "edge"
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
         return {"type": "reticle", "x": self.x, "y": self.y,
-                "monitor": self.monitor, "ts": self.ts}
+                "monitor": self.monitor, "zone": self.zone, "ts": self.ts}
 
 
 @dataclass
@@ -58,10 +59,12 @@ class MonitorsEvent:
     """Per-monitor layout (logical coords) for the overlay to draw zones."""
 
     monitors: list[tuple[int, int, int, int]] = field(default_factory=list)
+    active_monitor: int | None = None  # modifier-hand selection (None = whole desktop)
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "monitors", "monitors": self.monitors, "ts": self.ts}
+        return {"type": "monitors", "monitors": self.monitors,
+                "active_monitor": self.active_monitor, "ts": self.ts}
 
 
 def encode(event: SkeletonEvent | ReticleEvent | StatusEvent | MonitorsEvent) -> dict[str, Any]:

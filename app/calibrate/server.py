@@ -143,6 +143,8 @@ def _make_handler(config: AppConfig, pipeline: Optional[object],
                     "monitors": layout["monitors"],
                     "screen": layout["screen"],
                 })
+            elif path == "/api/spatial":
+                self._send_json(200, _spatial_status(config, pipeline))
             elif path in ("/", "/calibrate"):
                 body = _read_page()
                 self._send_html(body)
@@ -179,6 +181,57 @@ def _monitor_layout(pipeline: Optional[object]) -> dict[str, Any]:
         monitors = detect_monitors()
         screen = list(detect_screen())
     return {"monitors": [list(m) for m in monitors], "screen": screen}
+
+
+def _spatial_status(config: AppConfig, pipeline: Optional[object]) -> dict[str, Any]:
+    """Spatial-awareness status for the calibration page (Phase 2).
+
+    Mirrors config + live mapper state: whether a homography calibration is
+    present/valid, the active monitor selection, and the modifier-hand
+    timing gates. Read-only — lets the page show calibration state without
+    guessing it from the config dump.
+    """
+    from ..perception.calibration import is_valid_homography
+    from ..perception.mapping import detect_monitors, detect_screen
+
+    ctrl = config.control
+    mapper = getattr(pipeline, "mapper", None)
+    if mapper is not None and mapper.config.screen is not None:
+        monitors = mapper.config.monitors or detect_monitors()
+        screen = tuple(mapper.config.screen) if all(v is not None for v in mapper.config.screen) else detect_screen()
+        active = mapper.config.active_monitor
+    else:
+        monitors = detect_monitors()
+        screen = detect_screen()
+        active = ctrl.active_monitor
+
+    calibration = ctrl.calibration
+    zones = {}
+    sx, sy, sw, sh = screen
+    for idx in range(len(monitors)):
+        mx, my, mw, mh = monitors[idx]
+        zones[f"monitor_{idx}"] = {"center": [mx + mw // 2, my + mh // 2]}
+    if sw > 0 and sh > 0:
+        zones["left_screen"] = {"center": [sx + sw // 4, sy + sh // 2]}
+        zones["right_screen"] = {"center": [sx + 3 * sw // 4, sy + sh // 2]}
+
+    return {
+        "screen": list(screen),
+        "monitors": [list(m) for m in monitors],
+        "active_monitor": active,
+        "active_monitor_zone": (
+            f"monitor_{active}" if active is not None and 0 <= active < len(monitors)
+            else None),
+        "calibration": calibration,
+        "calibration_valid": is_valid_homography(calibration),
+        "modifier": {
+            "zone_hold_ms": ctrl.zone_hold_ms,
+            "menu_hold_ms": ctrl.menu_hold_ms,
+            "menu_timeout_ms": ctrl.menu_timeout_ms,
+            "passive_calibrate": ctrl.passive_calibrate,
+        },
+        "zones": zones,
+    }
 
 
 def apply_config_update(cfg: AppConfig, pipeline: Optional[object],

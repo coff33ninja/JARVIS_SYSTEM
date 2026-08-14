@@ -99,6 +99,30 @@ def hand_size(lmks: Landmarks) -> float:
     return d if d > 1e-6 else 0.1
 
 
+# Non-thumb fingers with their MCP/PIP/TIP indices (MediaPipe hand model).
+_EXTENDED_FINGERS: tuple[tuple[int, int, int], ...] = (
+    (INDEX_MCP, INDEX_PIP, INDEX_TIP),
+    (MIDDLE_MCP, MIDDLE_PIP, MIDDLE_TIP),
+    (RING_MCP, RING_PIP, RING_TIP),
+    (PINKY_MCP, PINKY_PIP, PINKY_TIP),
+)
+
+
+def extended_finger_count(lmks: Landmarks) -> int:
+    """Number of extended non-thumb fingers (0-4).
+
+    A finger counts as extended when its tip is farther from the MCP than its
+    PIP — the straight-finger test, scale-invariant and robust to the hand's
+    absolute position. Used by the modifier hand for the finger-count monitor
+    selector (04_GESTURE_VOCABULARY).
+    """
+    count = 0
+    for mcp, pip, tip in _EXTENDED_FINGERS:
+        if distance(lmks[tip], lmks[mcp]) > distance(lmks[pip], lmks[mcp]):
+            count += 1
+    return count
+
+
 def palm_center(lmks: Landmarks) -> Landmark:
     """Robust palm center: mean of wrist, index MCP, pinky MCP."""
     return tuple(

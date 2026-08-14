@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.perception.calibration import fit_homography
 from app.perception.mapping import CursorMapper, MappingConfig, monitor_at
 
 
@@ -123,3 +124,76 @@ def test_point_at_zone_with_synthetic_monitors_config():
         invert_x=False))
     (_, _), zone = m.point_at_zone(0.99, 0.5)
     assert zone == 1
+
+
+# ------------------------------------------------------------------ #
+# Spatial awareness (Phase 2): active monitor + homography + zones
+# ------------------------------------------------------------------ #
+
+def test_active_monitor_centers_on_selected_monitor():
+    m = CursorMapper(MappingConfig(
+        screen=(0, 0, 2000, 800), monitors=[(0, 0, 1000, 800),
+                                            (1000, 0, 1000, 800)]))
+    assert m.set_active_monitor(1) is True
+    assert m.config.active_monitor == 1
+    x, y = m.to_screen(0.5, 0.5)
+    assert x == 1500  # center of monitor 1, not the 1000-px union center
+    assert y == 400
+
+
+def test_active_monitor_clamps_to_monitor():
+    m = CursorMapper(MappingConfig(
+        screen=(0, 0, 2000, 800), monitors=[(0, 0, 1000, 800),
+                                            (1000, 0, 1000, 800)]))
+    m.set_active_monitor(0)
+    x, _ = m.to_screen(0.95, 0.5)  # inverted: would push far right on union
+    assert x <= 999
+
+
+def test_set_active_monitor_rejects_bad_index():
+    m = CursorMapper(MappingConfig(screen=(0, 0, 1000, 800)))
+    assert m.set_active_monitor(5) is False
+    assert m.config.active_monitor is None
+    assert m.set_active_monitor(None) is True  # reset to whole desktop
+
+
+def test_active_monitor_none_uses_union():
+    m = CursorMapper(MappingConfig(
+        screen=(0, 0, 2000, 800), monitors=[(0, 0, 1000, 800),
+                                            (1000, 0, 1000, 800)]))
+    x, _ = m.to_screen(0.5, 0.5)
+    assert x == 1000  # union center (no active monitor)
+
+
+def test_homography_path_overrides_gain():
+    cal = fit_homography([(0, 0), (1, 0), (1, 1), (0, 1)],
+                         [(0, 0), (1000, 0), (1000, 800), (0, 800)])
+    # invert_x=True would put hand-right (0.9) far LEFT with the gain formula.
+    m = CursorMapper(MappingConfig(screen=(0, 0, 1000, 800), calibration=cal))
+    x, y = m.to_screen(0.9, 0.5)
+    assert abs(x - 900.0) < 2.0
+    assert abs(y - 400.0) < 2.0
+
+
+def test_invalid_calibration_falls_back_to_gain():
+    m = CursorMapper(MappingConfig(
+        screen=(0, 0, 1000, 800), calibration=[1.0] * 8))
+    x, y = m.to_screen(0.5, 0.5)
+    assert (x, y) == (500, 400)  # gain path (calibration ignored)
+
+
+def test_homography_clamps_to_screen():
+    cal = fit_homography([(0, 0), (1, 0), (1, 1), (0, 1)],
+                         [(0, 0), (1000, 0), (1000, 800), (0, 800)])
+    m = CursorMapper(MappingConfig(screen=(0, 0, 1000, 800), calibration=cal))
+    x, _ = m.to_screen(1.5, 0.5)
+    assert x <= 999
+
+
+def test_zone_for_names_monitor_and_gap():
+    m = CursorMapper(MappingConfig(
+        screen=(0, 0, 2000, 800), monitors=[(0, 0, 1000, 800),
+                                            (1000, 0, 1000, 800)],
+        invert_x=False))
+    assert m.zone_for(0.1, 0.5) == "monitor_0"
+    assert m.zone_for(0.9, 0.5) == "monitor_1"

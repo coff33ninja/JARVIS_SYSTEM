@@ -14,17 +14,42 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from ..config import AppConfig
+from ..control.menu import MenuCategory, MenuItem, MenuState, RadialMenu
 from ..control.modes import Mode, ModeMachine
 from ..control.virtual_mouse import VirtualMouse
 from ..hud.events import MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
 from .camera import Camera
-from .geometry import classify, is_circle_trace, two_hand_spread
+from .geometry import (
+    classify,
+    extended_finger_count,
+    is_circle_trace,
+    two_hand_spread,
+)
 from .hand_tracker import HandLandmarkerTracker
 from .mapping import CursorMapper, MappingConfig
+from .zones import LateralZone, lateral_zone
 
 logger = logging.getLogger(__name__)
 
 GESTURE_NONE = "none"
+
+
+@dataclass
+class ModifierInfo:
+    """Secondary-hand state driving monitor selection and the fist menu.
+
+    ``None``-ness of the pipeline's ``_modifier_hand`` marks "no modifier
+    hand present". ``finger_count`` counts extended non-thumb fingers
+    (0 = fist). The monitor selector logic (passive zone hold, finger-count
+    selection, menu trigger) wires in a later slice — this scaffold only
+    computes the state.
+    """
+
+    finger_count: int = 0
+    fist: bool = False
+    open_palm: bool = False
+    lateral: LateralZone = LateralZone.CENTER
+    index_xy: tuple[float, float] = (0.5, 0.5)
 
 
 @dataclass
@@ -116,6 +141,62 @@ class ControlPipeline:
         self._last_skeleton_ts = 0.0
         self._last_status_ts = 0.0
         self._status_gesture = ""
+        # Modifier hand (Phase 2): fist menu + monitor selection.
+        self._menu = self._build_menu()
+        self._menu_open_at = 0.0
+        self._mod_fist_start = 0.0
+        self._mod_zone: LateralZone | None = None
+        self._mod_zone_start = 0.0
+        self._mod_zone_fired = False
+        self._mod_count: int | None = None
+        self._mod_count_frames = 0
+        self._mod_count_fired = False
+
+    def _build_menu(self) -> RadialMenu:
+        """Fist-menu categories (04_GESTURE_VOCABULARY "Fist menu").
+
+        Modes / Screens / Zoom / Tune. The Gestures category (dynamic ADR-011
+        rebinding) lands with the registry-dispatch slice; Screens is built
+        from the detected monitor layout and hides itself when empty.
+        """
+        mode_items = [
+            MenuItem(f"mode.{m.value}", m.value.capitalize(),
+                     action_id="mode.change", params={"mode": m.value})
+            for m in (Mode.CONTROL, Mode.CHAT, Mode.TRANSFER,
+                      Mode.PRESENTATION, Mode.IDLE)
+        ]
+        screen_items = [
+            MenuItem(f"screen.{i}", f"Monitor {i + 1}",
+                     action_id="screen.select", params={"index": i})
+            for i in range(len(self.mapper.monitors))
+        ]
+        screen_items.append(MenuItem(
+            "screen.all", "All screens", action_id="screen.select",
+            params={"index": None}))
+        return RadialMenu([
+            MenuCategory("modes", "Modes", items=mode_items),
+            MenuCategory("screens", "Screens", items=screen_items),
+            MenuCategory("zoom", "Zoom", items=[
+                MenuItem("zoom.in", "Zoom in", action_id="zoom",
+                         params={"direction": "in"}),
+                MenuItem("zoom.out", "Zoom out", action_id="zoom",
+                         params={"direction": "out"}),
+            ]),
+            MenuCategory("tune", "Tune", items=[
+                MenuItem("tune.gain_x_up", "Gain X +", action_id="tune",
+                         params={"param": "gain_x_up"}),
+                MenuItem("tune.gain_x_down", "Gain X -", action_id="tune",
+                         params={"param": "gain_x_down"}),
+                MenuItem("tune.gain_y_up", "Gain Y +", action_id="tune",
+                         params={"param": "gain_y_up"}),
+                MenuItem("tune.gain_y_down", "Gain Y -", action_id="tune",
+                         params={"param": "gain_y_down"}),
+                MenuItem("tune.invert_x", "Invert X", action_id="tune",
+                         params={"param": "invert_x"}),
+                MenuItem("tune.invert_y", "Invert Y", action_id="tune",
+                         params={"param": "invert_y"}),
+            ]),
+        ])
 
     # ------------------------------------------------------------------ #
     # main loop
@@ -139,6 +220,9 @@ class ControlPipeline:
                 self.mouse.drag_end()
                 self._dragging = False
                 actions.append(PipelineAction("drag_end", gesture="fist"))
+            if self._menu.state is MenuState.OPEN:
+                self._menu.close()
+                actions.append(PipelineAction("menu.close", gesture="hand_lost"))
             self._lost_frames += 1
             # Grace: brief detection flickers keep the smoothing filter so the
             # cursor doesn't jump; a sustained loss resets it fully.
@@ -158,10 +242,16 @@ class ControlPipeline:
         self._two_hand_zoom(result, actions)
         pose = classify(lmks)
         self._emit(result, pose)
+        # Modifier hand: fist menu + monitor selection. While the menu is open
+        # it owns the frame — the primary pinch confirms instead of clicking,
+        # so dispatch is suspended (and for one more frame after it closes,
+        # so the confirming pinch doesn't also click).
+        menu_was_open = self._modifier(result, pose, actions)
         # Misfire guard: with both hands up in a resting pose (e.g. a two-hand
         # spread), the spread handler owns the frame — don't also let the
         # primary open palm fire catch/release.
-        if not self._rest_pose(result, pose):
+        if (not menu_was_open and self._menu.state is not MenuState.OPEN
+                and not self._rest_pose(result, pose)):
             actions.extend(self._dispatch(pose))
         actions.extend(self._circle(pose))
         return actions
@@ -185,6 +275,289 @@ class ControlPipeline:
                 if hand == preferred:
                     return lmks
         return hands[0]
+
+    def _modifier_hand(self, result) -> ModifierInfo | None:
+        """State of the secondary hand, or None when there is no modifier.
+
+        Secondary = the non-preferred hand. Its lateral band selects the
+        passive monitor zone, its extended-finger count selects a monitor
+        directly, and a held fist triggers the HUD menu (consumed in
+        ``_modifier``). Returns None with fewer than two hands or no handedness
+        labels, so a lone hand never reads as a modifier.
+        """
+        hands = result.hands or []
+        if len(hands) < 2 or not result.handedness or len(result.handedness) < 2:
+            return None
+        preferred = self.config.control.preferred_hand
+        secondary = None
+        for lmks, hand in zip(hands, result.handedness):
+            if hand != preferred:
+                secondary = lmks
+                break
+        if secondary is None:
+            return None
+        pose = classify(secondary)
+        return ModifierInfo(
+            finger_count=0 if pose.fist else extended_finger_count(secondary),
+            fist=pose.fist,
+            open_palm=pose.open_palm,
+            lateral=lateral_zone(pose.index_xy[0]),
+            index_xy=pose.index_xy,
+        )
+
+    def _modifier(self, result, pose, actions: list[PipelineAction]) -> bool:
+        """Drive the modifier hand: fist menu + monitor selection.
+
+        Three levels, in priority order (04_GESTURE_VOCABULARY): fist -> menu,
+        finger count -> monitor, passive lateral zone -> monitor. All gated on
+        two hands, a non-rest posture, and a mode other than IDLE. While the
+        menu is open it owns the frame (highlight/confirm/cancel/timeout).
+
+        Returns True when the menu was open at entry — the caller suspends
+        gesture dispatch for that frame.
+        """
+        menu_was_open = self._menu.state is MenuState.OPEN
+        mod = self._modifier_hand(result)
+        if self._menu.state is MenuState.OPEN:
+            self._menu_frame(result, pose, mod, actions)
+            return True
+        if self.modes.mode is Mode.IDLE or mod is None:
+            self._reset_modifier_state()
+            return False
+        if self._rest_pose(result, pose):
+            self._reset_modifier_state()
+            return False
+        if self._fist_trigger(mod, actions):
+            # A deliberate fist owns the frame; drop any pending zone/count.
+            self._mod_zone = None
+            self._mod_zone_start = 0.0
+            self._mod_zone_fired = False
+            self._mod_count = None
+            self._mod_count_frames = 0
+            self._mod_count_fired = False
+            return False
+        if self._finger_count_select(mod, pose, actions):
+            self._mod_zone = None
+            self._mod_zone_start = 0.0
+            self._mod_zone_fired = False
+            return False
+        self._passive_zone_select(mod, actions)
+        return False
+
+    # ------------------------------------------------------------------ #
+    # modifier levels
+    # ------------------------------------------------------------------ #
+
+    def _fist_trigger(self, mod: ModifierInfo, actions: list[PipelineAction]) -> bool:
+        """Hold the secondary fist >= ``menu_hold_ms`` to open the menu.
+
+        Returns True whenever the secondary hand is a fist (the frame is
+        owned by the modifier, no zone/count action). The menu is sticky once
+        opened — the trigger fist can relax; it closes on confirm / cancel /
+        timeout / hand loss.
+        """
+        cfg = self.config.control
+        now = time.monotonic()
+        if not mod.fist:
+            self._mod_fist_start = 0.0
+            return False
+        if self._mod_fist_start <= 0.0:
+            self._mod_fist_start = now
+            return True
+        hold = cfg.menu_hold_ms / 1000.0 if cfg.menu_hold_ms > 0 else 0.0
+        if (now - self._mod_fist_start >= hold
+                and self._menu.state is MenuState.CLOSED
+                and self._menu.open()):
+            self._menu_open_at = now
+            actions.append(PipelineAction("menu.open", gesture="fist"))
+        return True
+
+    def _modifier_count(self, mod: ModifierInfo, pose) -> int | None:
+        """Monitor number (1-based) the secondary hand selects, or None.
+
+        1-4 extended fingers select monitor N directly; a full open palm
+        (5 fingers) selects monitor 5 only while the primary hand is pointing,
+        so a two-palm spread stays a spread (04_GESTURE_VOCABULARY collision
+        defaults).
+        """
+        if mod.fist:
+            return None
+        if mod.open_palm:
+            return 5 if pose.index_extended else None
+        if mod.finger_count >= 1:
+            return mod.finger_count
+        return None
+
+    def _finger_count_select(self, mod: ModifierInfo, pose,
+                             actions: list[PipelineAction]) -> bool:
+        """Edge-trigger a direct monitor selection from the finger count.
+
+        Debounced by ``hold_frames`` so finger jitter (1 vs 2) can't re-fire.
+        Returns True when a count is active (owns the frame; no passive zone).
+        """
+        count = self._modifier_count(mod, pose)
+        if count is None:
+            self._mod_count = None
+            self._mod_count_frames = 0
+            self._mod_count_fired = False
+            return False
+        if count != self._mod_count:
+            self._mod_count = count
+            self._mod_count_frames = 1
+            self._mod_count_fired = False
+        else:
+            self._mod_count_frames += 1
+        if (self._mod_count_frames >= self.config.control.hold_frames
+                and not self._mod_count_fired):
+            self._mod_count_fired = True
+            idx = count - 1
+            if self.mapper.set_active_monitor(idx):
+                actions.append(PipelineAction("screen.select", (idx,),
+                                              gesture="count"))
+        return True
+
+    def _zone_target(self, zone: LateralZone) -> int | None:
+        """Monitor index the passive zone leads to (relative to current)."""
+        monitors = self.mapper.monitors
+        if not monitors:
+            return None
+        active = self.mapper.config.active_monitor
+        if zone is LateralZone.LEFT:
+            return 0 if active is None else max(0, active - 1)
+        return len(monitors) - 1 if active is None else min(len(monitors) - 1, active + 1)
+
+    def _passive_zone_select(self, mod: ModifierInfo,
+                             actions: list[PipelineAction]) -> None:
+        """Passive monitor selection: hold a lateral zone ``zone_hold_ms``.
+
+        The active monitor only changes after the secondary hand holds the
+        same outer zone for the hold window (anti-thrash). ``zone_hold_ms``
+        <= 0 disables the level.
+        """
+        cfg = self.config.control
+        now = time.monotonic()
+        if cfg.zone_hold_ms <= 0:
+            self._mod_zone = None
+            self._mod_zone_start = 0.0
+            self._mod_zone_fired = False
+            return
+        zone = mod.lateral if mod.lateral is not LateralZone.CENTER else None
+        if zone is None:
+            self._mod_zone = None
+            self._mod_zone_start = 0.0
+            self._mod_zone_fired = False
+            return
+        if zone != self._mod_zone:
+            self._mod_zone = zone
+            self._mod_zone_start = now
+            self._mod_zone_fired = False
+            return
+        if (now - self._mod_zone_start >= cfg.zone_hold_ms / 1000.0
+                and not self._mod_zone_fired):
+            self._mod_zone_fired = True
+            idx = self._zone_target(zone)
+            if (idx is not None and idx != self.mapper.config.active_monitor
+                    and self.mapper.set_active_monitor(idx)):
+                actions.append(PipelineAction("screen.select", (idx,),
+                                              gesture="zone"))
+
+    def _reset_modifier_state(self) -> None:
+        self._mod_fist_start = 0.0
+        self._mod_zone = None
+        self._mod_zone_start = 0.0
+        self._mod_zone_fired = False
+        self._mod_count = None
+        self._mod_count_frames = 0
+        self._mod_count_fired = False
+
+    # ------------------------------------------------------------------ #
+    # fist menu interaction
+    # ------------------------------------------------------------------ #
+
+    def _menu_frame(self, result, pose, mod: ModifierInfo | None,
+                    actions: list[PipelineAction]) -> None:
+        """One frame of the open menu: timeout, cancel, highlight, confirm."""
+        cfg = self.config.control
+        now = time.monotonic()
+        if now - self._menu_open_at >= cfg.menu_timeout_ms / 1000.0:
+            self._menu.close()
+            actions.append(PipelineAction("menu.close", gesture="timeout"))
+            return
+        if mod is None:
+            # Secondary hand gone: the menu has no anchor, close it.
+            self._menu.close()
+            actions.append(PipelineAction("menu.close", gesture="hand_lost"))
+            return
+        if mod.open_palm or (pose is not None and pose.open_palm):
+            if self._menu.cancel():
+                actions.append(PipelineAction("menu.cancel", gesture="open_palm"))
+            return
+        if pose is not None and pose.index_extended:
+            sx, sy = self.mapper.to_screen(*pose.index_xy)
+            sx0, sy0, sw, sh = self.mapper.screen
+            dx, dy = sx - (sx0 + sw / 2.0), sy - (sy0 + sh / 2.0)
+            self._menu.select_category(dx, dy)
+            self._menu.select_item(dx, dy)
+        if pose is not None and pose.pinch and not self._prev_pinch:
+            item = self._menu.confirm()
+            if item is not None:
+                self._menu.close()
+                self._prev_pinch = True
+                actions.append(PipelineAction("menu.confirm",
+                                              gesture="pinch"))
+                executed = self._execute_menu_item(item)
+                if executed is not None:
+                    actions.append(executed)
+
+    def _execute_menu_item(self, item: MenuItem) -> PipelineAction | None:
+        """Run a confirmed menu leaf. Returns the action (if any)."""
+        pid = item.action_id
+        if pid == "screen.select":
+            idx = item.params.get("index")
+            if self.mapper.set_active_monitor(idx):
+                return PipelineAction("screen.select", (idx,), gesture="menu")
+        elif pid == "mode.change":
+            try:
+                target = Mode(item.params["mode"])
+            except ValueError:
+                return None
+            self.modes.goto(target)
+            return PipelineAction("mode.change", (target.value,),
+                                  gesture="menu")
+        elif pid == "zoom":
+            direction = item.params.get("direction", "in")
+            self.mouse.hotkey("ctrl", "+" if direction == "in" else "-")
+            return PipelineAction("zoom_in" if direction == "in" else "zoom_out",
+                                  gesture="menu")
+        elif pid == "tune":
+            return self._tune(item.params.get("param"))
+        return None
+
+    def _tune(self, param: str) -> PipelineAction | None:
+        """Apply a Tune-category adjustment (gain / invert), live."""
+        cfg = self.config.control
+        m = self.mapper.config
+        if param == "gain_x_up":
+            value = min(10.0, getattr(cfg, "gain_x", 3.2) + 0.5)
+            cfg.gain_x, m.gain_x = value, value
+        elif param == "gain_x_down":
+            value = max(0.5, getattr(cfg, "gain_x", 3.2) - 0.5)
+            cfg.gain_x, m.gain_x = value, value
+        elif param == "gain_y_up":
+            value = min(10.0, getattr(cfg, "gain_y", 3.2) + 0.5)
+            cfg.gain_y, m.gain_y = value, value
+        elif param == "gain_y_down":
+            value = max(0.5, getattr(cfg, "gain_y", 3.2) - 0.5)
+            cfg.gain_y, m.gain_y = value, value
+        elif param == "invert_x":
+            m.invert_x = not m.invert_x
+            cfg.invert_x = m.invert_x
+        elif param == "invert_y":
+            m.invert_y = not m.invert_y
+            cfg.invert_y = m.invert_y
+        else:
+            return None
+        return PipelineAction("tune", (param,), gesture="menu")
 
     def _spread(self, result) -> None:
         """Edge-trigger the two-hand spread: toggles Control <-> Transfer.
@@ -523,6 +896,9 @@ class ControlPipeline:
         self._prev_scroll_y = 0.5
         self._prev_move_sx = None
         self._swipe_accum = 0.0
+        self._reset_modifier_state()
+        if self._menu.state is MenuState.OPEN:
+            self._menu.close()
 
     # ------------------------------------------------------------------ #
     # HUD + stats
@@ -535,14 +911,18 @@ class ControlPipeline:
         if pose is not None:
             self._status_gesture = pose.name
         if not self._monitors_sent:
-            self.hud.broadcast(MonitorsEvent(monitors=self.mapper.monitors))
+            self.hud.broadcast(MonitorsEvent(
+                monitors=self.mapper.monitors,
+                active_monitor=self.mapper.config.active_monitor,
+            ))
             self._monitors_sent = True
         if now - self._last_skeleton_ts >= self.config.hud.skeleton_interval_s:
             self.hud.broadcast(SkeletonEvent(hands=result.hands or []))
             self._last_skeleton_ts = now
         if pose is not None and pose.index_extended:
             (sx, sy), monitor = self.mapper.point_at_zone(*pose.index_xy)
-            self.hud.broadcast(ReticleEvent(x=sx, y=sy, monitor=monitor))
+            self.hud.broadcast(ReticleEvent(
+                x=sx, y=sy, monitor=monitor, zone=self.mapper.zone_for(*pose.index_xy)))
         self._emit_status()
 
     def _emit_status(self) -> None:

@@ -29,6 +29,15 @@ def test_reticle_event_schema():
     assert json.dumps(d)
 
 
+def test_reticle_event_zone_field():
+    d = ReticleEvent(x=100.0, y=200.0, monitor=0, zone="monitor_0").to_dict()
+    assert d["zone"] == "monitor_0"
+    assert d["monitor"] == 0
+    # default zone is empty (backwards compatible)
+    assert ReticleEvent(0, 0).to_dict()["zone"] == ""
+    assert json.dumps(d)
+
+
 def test_status_event_schema():
     d = StatusEvent(mode="control", fps=29.5, detected=True, gesture="point").to_dict()
     assert d["type"] == "status"
@@ -49,3 +58,14 @@ def test_timestamps_present():
     assert "ts" in SkeletonEvent().to_dict()
     assert "ts" in ReticleEvent(0, 0).to_dict()
     assert "ts" in StatusEvent().to_dict()
+
+
+def test_monitors_event_active_monitor_field():
+    from app.hud.events import MonitorsEvent
+
+    d = MonitorsEvent(monitors=[(0, 0, 1000, 800)], active_monitor=1).to_dict()
+    assert d["type"] == "monitors"
+    assert d["active_monitor"] == 1
+    # default is None (whole desktop) — backwards compatible
+    assert MonitorsEvent().to_dict()["active_monitor"] is None
+    assert json.dumps(d)

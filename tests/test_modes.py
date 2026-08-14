@@ -104,3 +104,16 @@ def test_known_gestures_subset_of_mode_table():
 
 def test_repr():
     assert "control" in repr(ModeMachine(Mode.CONTROL))
+
+
+def test_goto_jumps_anywhere_ignoring_table():
+    m = ModeMachine(Mode.IDLE)
+    assert m.goto(Mode.PRESENTATION).value == "presentation"
+    assert m.goto(Mode.CHAT).value == "chat"
+    # From any source mode, direct jump (menu-driven) bypasses transitions.
+    assert m.goto(Mode.CONTROL).value == "control"
+
+
+def test_goto_ignores_invalid_target():
+    m = ModeMachine(Mode.CONTROL)
+    assert m.goto("not-a-mode").value == "control"

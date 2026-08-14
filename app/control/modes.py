@@ -68,6 +68,16 @@ class ModeMachine:
         self.mode = _TRANSITIONS.get((self.mode, trigger), self.mode)
         return self.mode
 
+    def goto(self, target: Mode) -> Mode:
+        """Jump directly to a target mode (menu-driven), bypassing the table.
+
+        Unlike ``transition`` this does not validate a trigger — used by the
+        fist-menu Modes category where any mode is reachable from any mode.
+        """
+        if isinstance(target, Mode):
+            self.mode = target
+        return self.mode
+
     def active_gestures(self) -> set[str]:
         return _ACTIVE.get(self.mode, set())
 

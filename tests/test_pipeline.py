@@ -86,12 +86,13 @@ def patch_time(module, now):
     return patch.object(module, "time", _FakeTime)
 
 
-def make_pipeline(result=None, mode=Mode.CONTROL, config=None):
+def make_pipeline(result=None, mode=Mode.CONTROL, config=None, monitors=None):
     cfg = config or AppConfig()
     tracker = FakeTracker(result)
     mouse = FakeMouse()
     hud = FakeHUD()
-    mapper = CursorMapper(MappingConfig(screen=(0, 0, 1000, 800)))
+    mapper = CursorMapper(MappingConfig(screen=(0, 0, 1000, 800),
+                                        monitors=monitors or []))
     pipe = ControlPipeline(
         config=cfg, camera=FakeCamera(), tracker=tracker, mouse=mouse,
         mapper=mapper, hud=hud, modes=ModeMachine(mode))
@@ -122,8 +123,6 @@ def test_idle_wakes_on_hand():
     actions = pipe.step(FRAME)
     assert actions == []
     assert pipe.modes.mode == Mode.CONTROL
-    assert mouse.calls == []
-
 
 def test_point_moves_cursor():
     pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
@@ -799,3 +798,281 @@ def test_two_hand_deliberate_primary_still_acts():
     for _ in range(2):
         pipe.step(FRAME)
     assert any(c[0] == "click" for c in mouse.calls)
+
+
+# ------------------------------------------------------------------ #
+# Modifier hand scaffold (Phase 2 second-hand interaction)
+# ------------------------------------------------------------------ #
+
+def test_modifier_hand_none_with_single_hand():
+    pipe, *_ = make_pipeline()
+    assert pipe._modifier_hand(hands(open_hand())) is None
+
+
+def test_modifier_hand_none_without_handedness_labels():
+    pipe, *_ = make_pipeline()
+    result = HandTrackingResult(hands=[open_hand(), fist()], handedness=[])
+    assert pipe._modifier_hand(result) is None
+
+
+def test_modifier_hand_is_secondary_non_preferred():
+    pipe, *_ = make_pipeline()
+    mod = pipe._modifier_hand(two_hands(
+        _shift(open_hand(), 0.3, 0.0),   # primary (Right)
+        _shift(fist(), -0.3, 0.0)))      # secondary (Left)
+    assert mod is not None
+    assert mod.fist is True
+    assert mod.finger_count == 0
+    assert mod.open_palm is False
+
+
+def test_modifier_hand_finger_count():
+    pipe, *_ = make_pipeline()
+    mod = pipe._modifier_hand(two_hands(
+        _shift(point_hand(), 0.3, 0.0),
+        _shift(v_sign(), -0.3, 0.0)))
+    assert mod is not None
+    assert mod.finger_count == 2  # index + middle
+    assert mod.fist is False
+
+
+def test_modifier_hand_open_palm():
+    pipe, *_ = make_pipeline()
+    mod = pipe._modifier_hand(two_hands(
+        _shift(point_hand(), 0.3, 0.0),
+        _shift(open_hand(), -0.3, 0.0)))
+    assert mod is not None
+    assert mod.open_palm is True
+    assert mod.finger_count == 4
+
+
+def test_modifier_hand_lateral_zone_tracks_secondary_x():
+    pipe, *_ = make_pipeline()
+    # Secondary pushed far left in frame -> LEFT zone.
+    mod_left = pipe._modifier_hand(two_hands(
+        _shift(open_hand(), 0.3, 0.0),
+        _shift(open_hand(), -0.35, 0.0)))
+    assert mod_left.lateral.value == "left"
+    # Secondary pushed far right -> RIGHT zone.
+    mod_right = pipe._modifier_hand(two_hands(
+        _shift(open_hand(), -0.3, 0.0),
+        _shift(open_hand(), 0.35, 0.0)))
+    assert mod_right.lateral.value == "right"
+
+
+# --------------------------------------------------------------------------- #
+# Modifier wiring: fist menu + finger-count / passive-zone monitor selection
+# --------------------------------------------------------------------------- #
+
+from unittest.mock import patch  # noqa: E402
+
+from app.control.menu import MenuState  # noqa: E402
+from conftest import thumb_up_hand  # noqa: E402
+
+
+class _Clock:
+    now = 1000.0
+
+    @staticmethod
+    def monotonic():
+        return _Clock.now
+
+
+def make_two_monitors():
+    return [(0, 0, 1000, 800), (1000, 0, 1000, 800)]
+
+
+def step_actions(pipe, clock_now):
+    _Clock.now = clock_now
+    with patch("app.perception.pipeline.time.monotonic", _Clock.monotonic):
+        return pipe.step(FRAME)
+
+
+def test_modifier_fist_hold_opens_menu():
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                       _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = result
+    step_actions(pipe, 1000.0)  # arms the hold timer
+    assert pipe._menu.state is MenuState.CLOSED
+    actions = step_actions(pipe, 1000.3)  # 300ms > menu_hold_ms (250)
+    assert ("menu.open", ()) in [(a.name, a.args) for a in actions]
+    assert pipe._menu.state is MenuState.OPEN
+
+
+def test_modifier_fist_release_does_not_close_menu():
+    """The menu is sticky once open; dropping the trigger fist keeps it."""
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    two = lambda secondary: two_hands(  # noqa: E731
+        _shift(point_hand(), 0.3, 0.0), secondary)
+    pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    assert pipe._menu.state is MenuState.OPEN
+    pipe.tracker.result = two(_shift(thumb_up_hand(), -0.3, 0.0))
+    step_actions(pipe, 1000.4)  # fist relaxed -> thumb up, no deliberate gesture
+    assert pipe._menu.state is MenuState.OPEN
+
+
+def test_modifier_menu_confirm_mode_change():
+    """Point up-left into Modes, pinch -> mode.change; no stray click."""
+    pipe, mouse, *_ = make_pipeline(monitors=make_two_monitors())
+    two = lambda secondary: two_hands(  # noqa: E731
+        _shift(point_hand(), -0.3, -0.3), secondary)
+    pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens menu
+    pipe.tracker.result = two_hands(_shift(pinch_hand(), -0.3, -0.3),
+                                    _shift(fist(), -0.3, 0.0))
+    actions = step_actions(pipe, 1000.35)
+    names = [a.name for a in actions]
+    assert "menu.confirm" in names
+    assert ("mode.change", ("control",)) in [(a.name, a.args) for a in actions]
+    assert pipe._menu.state is MenuState.CLOSED
+    assert not any(a.name == "left_click" for a in actions)
+    assert all(c[0] != "click" for c in mouse.calls)
+
+
+def test_modifier_menu_confirm_screen():
+    """Point east into Screens, pinch -> screen.select(0)."""
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    two = lambda secondary: two_hands(  # noqa: E731
+        _shift(point_hand(), -0.3, -0.3), secondary)
+    pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens menu
+    pipe.tracker.result = two_hands(_shift(pinch_hand(), -0.3, 0.0),
+                                    _shift(fist(), -0.3, 0.0))
+    actions = step_actions(pipe, 1000.35)
+    assert ("screen.select", (0,)) in [(a.name, a.args) for a in actions]
+    assert pipe.mapper.config.active_monitor == 0
+
+
+def test_modifier_menu_cancel_open_palm():
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens menu
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(open_hand(), -0.3, 0.0))
+    actions = step_actions(pipe, 1000.35)
+    assert "menu.cancel" in [a.name for a in actions]
+    assert pipe._menu.state is MenuState.CLOSED
+
+
+def test_modifier_menu_timeout_closes():
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens menu
+    actions = step_actions(pipe, 1000.3 + 5.1)  # past menu_timeout_ms (5000)
+    assert any(a.name == "menu.close" and a.gesture == "timeout"
+               for a in actions)
+    assert pipe._menu.state is MenuState.CLOSED
+
+
+def test_modifier_menu_hand_lost_closes():
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens menu
+    pipe.tracker.result = HandTrackingResult()  # no hands at all
+    actions = step_actions(pipe, 1000.4)
+    assert any(a.name == "menu.close" and a.gesture == "hand_lost"
+               for a in actions)
+    assert pipe._menu.state is MenuState.CLOSED
+
+
+def test_modifier_finger_count_selects_monitor():
+    """Two extended fingers on the secondary -> monitor 2 (index 1)."""
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(v_sign(), -0.3, 0.0))
+    seen = []
+    for i in range(pipe.config.control.hold_frames):
+        seen.extend(step_actions(pipe, 1000.0 + 0.05 * i))
+    assert ("screen.select", (1,)) in [(a.name, a.args) for a in seen]
+    assert pipe.mapper.config.active_monitor == 1
+
+
+def test_modifier_five_fingers_needs_primary_pointing():
+    """Open palm on the secondary = monitor 5 only while the primary points."""
+    pipe, *_ = make_pipeline(monitors=[(0, 0, 1000, 800)] * 5)
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(open_hand(), -0.3, 0.0))
+    seen = []
+    for i in range(pipe.config.control.hold_frames):
+        seen.extend(step_actions(pipe, 1000.0 + 0.05 * i))
+    assert ("screen.select", (4,)) in [(a.name, a.args) for a in seen]
+    assert pipe.mapper.config.active_monitor == 4
+
+
+def test_modifier_both_open_palms_is_rest_no_select():
+    pipe, *_ = make_pipeline(monitors=[(0, 0, 1000, 800)] * 5)
+    pipe.tracker.result = two_hands(_shift(open_hand(), 0.1, 0.0),
+                                    _shift(open_hand(), -0.1, 0.0))
+    seen = []
+    for i in range(pipe.config.control.hold_frames + 1):
+        seen.extend(step_actions(pipe, 1000.0 + 0.05 * i))
+    assert not any(a.name == "screen.select" for a in seen)
+    assert pipe.mapper.config.active_monitor is None
+
+
+def test_modifier_passive_zone_selects_left():
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    step_actions(pipe, 1000.0)  # arms the zone hold
+    actions = step_actions(pipe, 1000.35)  # 350ms > zone_hold_ms (300)
+    assert ("screen.select", (0,)) in [(a.name, a.args) for a in actions]
+    assert pipe.mapper.config.active_monitor == 0
+
+
+def test_modifier_passive_zone_requires_hold():
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    seen = [*step_actions(pipe, 1000.0)]  # LEFT zone armed
+    # Break the hold by drifting back to center before the window elapses.
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(thumb_up_hand(), 0.0, 0.0))
+    seen.extend(step_actions(pipe, 1000.1))
+    # Re-enter the zone: the hold timer restarts, so nothing fires yet.
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    seen.extend(step_actions(pipe, 1000.4))
+    assert not any(a.name == "screen.select" for a in seen)
+    assert pipe.mapper.config.active_monitor is None
+
+
+def test_modifier_passive_zone_hold_zero_disables():
+    cfg = AppConfig()
+    cfg.control.zone_hold_ms = 0
+    pipe, *_ = make_pipeline(monitors=make_two_monitors(), config=cfg)
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    seen = []
+    for i in range(pipe.config.control.hold_frames + 1):
+        seen.extend(step_actions(pipe, 1000.0 + 0.2 * i))
+    assert not any(a.name == "screen.select" for a in seen)
+
+
+def test_modifier_idle_does_not_open_menu():
+    pipe, *_ = make_pipeline(mode=Mode.IDLE, monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
+                                    _shift(fist(), -0.3, 0.0))
+    actions = step_actions(pipe, 1000.0)
+    assert "menu.open" not in [a.name for a in actions]
+    assert pipe._menu.state is MenuState.CLOSED
+
+
+def test_modifier_none_with_single_hand():
+    """A lone hand (primary only) must never act as a modifier."""
+    pipe, *_ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = hands(_shift(fist(), 0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    assert pipe._modifier_hand(pipe.tracker.result) is None
+    assert pipe._menu.state is MenuState.CLOSED

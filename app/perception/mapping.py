@@ -18,6 +18,9 @@ import ctypes
 import logging
 from dataclasses import dataclass, field
 
+from .calibration import apply_homography, is_valid_homography
+from .zones import zone_for as _zone_for
+
 logger = logging.getLogger(__name__)
 
 ScreenRect = tuple[int, int, int, int]  # x, y, width, height
@@ -109,6 +112,11 @@ class MappingConfig:
     invert_y: bool = False
     screen: ScreenRect | None = None
     monitors: list[ScreenRect] = field(default_factory=list)
+    # Spatial awareness (Phase 2): calibrated homography (row-major 9 floats)
+    # replaces the gain/invert formula; active_monitor re-centers the cursor
+    # on one monitor's rect.
+    calibration: list[float] | None = None
+    active_monitor: int | None = None
 
     @classmethod
     def from_control(cls, cfg, screen: ScreenRect | None = None) -> "MappingConfig":
@@ -119,6 +127,8 @@ class MappingConfig:
             invert_y=cfg.invert_y,
             screen=screen or (cfg.screen_x, cfg.screen_y,
                               cfg.screen_w, cfg.screen_h),
+            calibration=cfg.calibration,
+            active_monitor=cfg.active_monitor,
         )
 
 
@@ -139,27 +149,60 @@ class CursorMapper:
     def monitors(self) -> list[ScreenRect]:
         return self.config.monitors or detect_monitors()
 
+    @property
+    def active_screen(self) -> ScreenRect:
+        """Rect the cursor maps/clamps into: active monitor or full desktop."""
+        idx = self.config.active_monitor
+        monitors = self.monitors
+        if idx is not None and 0 <= idx < len(monitors):
+            return monitors[idx]
+        return self.screen
+
+    def set_active_monitor(self, idx: int | None) -> bool:
+        """Select the monitor the cursor operates on (None = whole desktop).
+
+        Returns False when the index is out of range; the setting is left
+        unchanged in that case.
+        """
+        if idx is not None and not 0 <= idx < len(self.monitors):
+            return False
+        self.config.active_monitor = idx
+        return True
+
     def to_screen(self, nx: float, ny: float) -> tuple[int, int]:
-        """Map normalized (x, y) in [0,1] to (x, y) in screen pixels."""
-        x, y, w, h = self.screen
+        """Map normalized (x, y) in [0,1] to (x, y) in screen pixels.
+
+        Uses the calibrated homography when one is set and valid; otherwise
+        falls back to the anchor + gain formula. The result is re-centered on
+        and clamped to the active monitor (or the whole virtual desktop when
+        none is selected).
+        """
+        x, y, w, h = self.active_screen
         if w <= 0 or h <= 0:
-            logger.warning("screen rect is degenerate (%r); skipping move", self.screen)
+            logger.warning("screen rect is degenerate (%r); skipping move",
+                           self.active_screen)
             return (x + w // 2, y + h // 2)
 
-        dx = (nx - 0.5) * self.config.gain_x
-        dy = (ny - 0.5) * self.config.gain_y
-        if self.config.invert_x:
-            dx = -dx
-        if self.config.invert_y:
-            dy = -dy
-
-        cx, cy = x + w / 2.0, y + h / 2.0
-        px = cx + dx * w
-        py = cy + dy * h
+        if is_valid_homography(self.config.calibration):
+            px, py = apply_homography(self.config.calibration, nx, ny)
+        else:
+            dx = (nx - 0.5) * self.config.gain_x
+            dy = (ny - 0.5) * self.config.gain_y
+            if self.config.invert_x:
+                dx = -dx
+            if self.config.invert_y:
+                dy = -dy
+            cx, cy = x + w / 2.0, y + h / 2.0
+            px, py = cx + dx * w, cy + dy * h
 
         px = max(x, min(x + w - 1, px))
         py = max(y, min(y + h - 1, py))
         return (int(round(px)), int(round(py)))
+
+    def zone_for(self, nx: float, ny: float) -> str:
+        """Named zone string for a normalized hand position."""
+        px, py = self.to_screen(nx, ny)
+        return _zone_for(px, py, self.monitors, self.screen)
 
     def point_at_zone(self, nx: float, ny: float) -> tuple[tuple[int, int], int]:
         """Map a hand position to (screen point, monitor index it lands on).

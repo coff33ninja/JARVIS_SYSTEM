@@ -48,6 +48,15 @@ Selecting a monitor sets `active_monitor`, and the primary cursor re-centers on
 that monitor's rect. A spread frame is always owned by the spread handler
 (never treated as a monitor selection).
 
+**Implemented (Phase 2 wiring, `ControlPipeline._modifier`):** all three
+levels are live — passive zone and finger count edge-trigger
+`screen.select` actions (finger count debounced by `control.hold_frames`),
+and the fist menu is a momentary trigger that stays open (sticky) until
+pinch-confirm, either-hand open palm, `menu_timeout_ms`, or hand loss. The
+menu executes `mode.change` (via `ModeMachine.goto`), `screen.select`, zoom,
+and tune actions; the Gestures category is deferred to the registry-dispatch
+slice.
+
 ## Mixed-DPI handling (critical)
 
 - Get per-monitor scale from `GetDpiForMonitor` / the per-monitor DPI awareness APIs.

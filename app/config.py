@@ -106,6 +106,32 @@ class ControlConfig:
     screen_w: int | None = None
     screen_h: int | None = None
 
+    # --- Spatial awareness (Phase 2, 13_MULTIMONITOR / 04_GESTURE_VOCABULARY)
+    # Calibrated homography (3x3, row-major 9 floats) mapping normalized
+    # camera coordinates -> virtual desktop pixels. When present (and valid)
+    # CursorMapper.to_screen uses it instead of the gain/invert formula;
+    # gain/invert remain the fallback until a calibration exists.
+    calibration: list[float] | None = None
+
+    # Active monitor target for the cursor (index into the monitor layout,
+    # or None = whole virtual desktop). Set by the modifier hand; to_screen
+    # re-centers on this monitor's rect and clamps to it.
+    active_monitor: int | None = None
+
+    # Anti-thrash gate for the passive modifier-hand zone: the active monitor
+    # only changes after the secondary hand holds the same lateral zone for
+    # this long (ms). Prevents monitor switching during ordinary movement.
+    zone_hold_ms: int = 300
+
+    # Fist menu (secondary-hand modifier): grip-to-open hold, auto-close
+    # timeout. Menu model lives in app/control/menu.py.
+    menu_hold_ms: int = 250
+    menu_timeout_ms: int = 5000
+
+    # Passive spatial calibration: observe hand->cursor pairs during use and
+    # RANSAC-refine the homography. Off by default (can degrade the mapping).
+    passive_calibrate: bool = False
+
 
 @dataclass
 class HudConfig:
