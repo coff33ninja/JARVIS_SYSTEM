@@ -61,7 +61,9 @@ class FakeMic:
         return self.samples
 
 
-def make_loop(store, mic_samples, stt_texts, wake="jarvis", mode="keyword", llm_responses=None):
+def make_loop(
+    store, mic_samples, stt_texts, wake="jarvis", mode="keyword", llm_responses=None
+):
     llm = StubLLM(llm_responses or [_plain("on it")])
     agent = Agent(llm, store, recaller=Recaller(store))
     return (
@@ -134,6 +136,7 @@ def test_wake_mode_off_acts_on_any_speech(store):
 # on_command mode-switch hook
 # --------------------------------------------------------------------- #
 
+
 def _command_hook(command):
     if "chat" in command.lower():
         return "Chat mode."
@@ -152,8 +155,9 @@ def test_mode_command_short_circuits_agent(store):
 
 
 def test_non_mode_command_still_runs_agent(store):
-    loop, agent = make_loop(store, LOUD, ["jarvis open settings"],
-                            llm_responses=[_plain("done")])
+    loop, agent = make_loop(
+        store, LOUD, ["jarvis open settings"], llm_responses=[_plain("done")]
+    )
     loop.on_command = _command_hook
     result = loop.run_once()
     assert result["command"] == "open settings"

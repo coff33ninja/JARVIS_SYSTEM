@@ -56,8 +56,9 @@ class Embedder:
             client.models.list()
             self._ping_ok = True
         except Exception as exc:
-            logger.warning("embedding endpoint unreachable (%s): %s",
-                           self.config.base_url, exc)
+            logger.warning(
+                "embedding endpoint unreachable (%s): %s", self.config.base_url, exc
+            )
         return self._ping_ok
 
     def embed(self, texts: str | list[str]) -> list[list[float]]:

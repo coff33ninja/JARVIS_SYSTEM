@@ -67,9 +67,16 @@ def test_timestamps_present():
 
 def test_menu_event_schema():
     d = MenuEvent(
-        state="open", category="modes", item="mode.chat",
-        categories=[{"id": "modes", "label": "Modes",
-                     "items": [{"id": "mode.chat", "label": "Chat"}]}],
+        state="open",
+        category="modes",
+        item="mode.chat",
+        categories=[
+            {
+                "id": "modes",
+                "label": "Modes",
+                "items": [{"id": "mode.chat", "label": "Chat"}],
+            }
+        ],
     ).to_dict()
     assert d["type"] == "menu"
     assert d["state"] == "open"

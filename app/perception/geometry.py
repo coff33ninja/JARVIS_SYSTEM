@@ -42,7 +42,7 @@ class GeometryConfig:
     two_finger_pinch_threshold: float = 0.06
 
     @classmethod
-    def from_control(cls, cfg) -> "GeometryConfig":
+    def from_control(cls, cfg) -> GeometryConfig:
         return cls(
             pinch_threshold=cfg.pinch_threshold,
             two_finger_pinch_threshold=cfg.two_finger_pinch_threshold,
@@ -158,12 +158,14 @@ def finger_tip(lmks: Landmarks, name: str) -> Landmark:
 
 def thumb_extended(lmks: Landmarks) -> bool:
     """True when the thumb tip is pushed out past its IP joint (vs. wrist)."""
-    return distance(lmks[THUMB_TIP], lmks[WRIST]) > \
-        distance(lmks[THUMB_IP], lmks[WRIST])
+    return distance(lmks[THUMB_TIP], lmks[WRIST]) > distance(
+        lmks[THUMB_IP], lmks[WRIST]
+    )
 
 
-def pinch_ratio(lmks: Landmarks, thumb: Landmark | None = None,
-                finger_tip: Landmark | None = None) -> float:
+def pinch_ratio(
+    lmks: Landmarks, thumb: Landmark | None = None, finger_tip: Landmark | None = None
+) -> float:
     """Distance between thumb tip and a fingertip, normalized by hand size."""
     size = hand_size(lmks)
     a = thumb if thumb is not None else lmks[THUMB_TIP]
@@ -226,11 +228,13 @@ def trace_bbox(points: list[TracePoint]) -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def is_circle_trace(points: list[TracePoint],
-                    min_samples: int = 8,
-                    min_sweep: float = 4.5,
-                    max_aspect: float = 0.6,
-                    endpoint_tol: float = 0.4) -> bool:
+def is_circle_trace(
+    points: list[TracePoint],
+    min_samples: int = 8,
+    min_sweep: float = 4.5,
+    max_aspect: float = 0.6,
+    endpoint_tol: float = 0.4,
+) -> bool:
     """True when ``points`` (normalized index-tip trajectory) draws a circle.
 
     A circle requires: enough samples, a roughly square bounding box (a fast
@@ -248,8 +252,10 @@ def is_circle_trace(points: list[TracePoint],
     aspect = min(w, h) / max(w, h) if w and h else 0.0
     if aspect < max_aspect:
         return False
-    if math.hypot(points[0][0] - points[-1][0],
-                  points[0][1] - points[-1][1]) > endpoint_tol * diag:
+    if (
+        math.hypot(points[0][0] - points[-1][0], points[0][1] - points[-1][1])
+        > endpoint_tol * diag
+    ):
         return False
     return abs(trace_signed_angle(points)) >= min_sweep
 

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from conftest import fist, open_hand, pinch_hand, point_hand, two_pinch_hand, v_sign
 
 from app.config import AppConfig
 from app.control.modes import Mode, ModeMachine
 from app.perception.hand_tracker import HandTrackingResult
 from app.perception.mapping import CursorMapper, MappingConfig
 from app.perception.pipeline import ControlPipeline
-from conftest import fist, open_hand, pinch_hand, point_hand, two_pinch_hand, v_sign
 
 
 class FakeTracker:
@@ -91,11 +91,18 @@ def make_pipeline(result=None, mode=Mode.CONTROL, config=None, monitors=None):
     tracker = FakeTracker(result)
     mouse = FakeMouse()
     hud = FakeHUD()
-    mapper = CursorMapper(MappingConfig(screen=(0, 0, 1000, 800),
-                                        monitors=monitors or []))
+    mapper = CursorMapper(
+        MappingConfig(screen=(0, 0, 1000, 800), monitors=monitors or [])
+    )
     pipe = ControlPipeline(
-        config=cfg, camera=FakeCamera(), tracker=tracker, mouse=mouse,
-        mapper=mapper, hud=hud, modes=ModeMachine(mode))
+        config=cfg,
+        camera=FakeCamera(),
+        tracker=tracker,
+        mouse=mouse,
+        mapper=mapper,
+        hud=hud,
+        modes=ModeMachine(mode),
+    )
     return pipe, mouse, hud, tracker
 
 
@@ -108,31 +115,30 @@ def _shift(lm, dx, dy):
 
 
 def two_hands(right, left, right_label="Right", left_label="Left"):
-    return HandTrackingResult(hands=[right, left],
-                              handedness=[right_label, left_label])
+    return HandTrackingResult(hands=[right, left], handedness=[right_label, left_label])
 
 
 def _spread_result():
     """Two open palms far apart in the frame -> a spread."""
-    return two_hands(_shift(open_hand(), 0.3, 0.0),
-                     _shift(open_hand(), -0.3, 0.0))
+    return two_hands(_shift(open_hand(), 0.3, 0.0), _shift(open_hand(), -0.3, 0.0))
 
 
 def test_idle_wakes_on_hand():
-    pipe, mouse, hud, _ = make_pipeline(hands(open_hand()), mode=Mode.IDLE)
+    pipe, _mouse, _hud, _ = make_pipeline(hands(open_hand()), mode=Mode.IDLE)
     actions = pipe.step(FRAME)
     assert actions == []
     assert pipe.modes.mode == Mode.CONTROL
 
+
 def test_point_moves_cursor():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()))
     for _ in range(2):  # hold_frames debounce
         pipe.step(FRAME)
     assert any(c[0] == "move" for c in mouse.calls)
 
 
 def test_pinch_clicks_once_on_edge():
-    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(pinch_hand()))
     for _ in range(2):  # hold_frames debounce then fire
         pipe.step(FRAME)
     clicks = [c for c in mouse.calls if c[0] == "click"]
@@ -145,7 +151,7 @@ def test_pinch_clicks_once_on_edge():
 
 def test_calibration_arm_captures_pinch_without_clicking():
     captured = []
-    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(pinch_hand()))
     pipe.arm_calibration(lambda nx, ny: captured.append((nx, ny)))
     for _ in range(2):  # hold_frames debounce then fire
         pipe.step(FRAME)
@@ -157,7 +163,7 @@ def test_calibration_arm_captures_pinch_without_clicking():
 
 
 def test_calibration_disarm_restores_click():
-    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(pinch_hand()))
     pipe.arm_calibration(lambda nx, ny: None)
     pipe.disarm_calibration()
     for _ in range(2):  # hold_frames debounce then fire
@@ -167,14 +173,14 @@ def test_calibration_disarm_restores_click():
 
 
 def test_two_finger_pinch_right_clicks():
-    pipe, mouse, hud, _ = make_pipeline(hands(two_pinch_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(two_pinch_hand()))
     for _ in range(2):
         pipe.step(FRAME)
     assert ("right_click",) in mouse.calls
 
 
 def test_fist_drags_then_release_on_hand_lost():
-    pipe, mouse, hud, tracker = make_pipeline(hands(fist()))
+    pipe, mouse, _hud, tracker = make_pipeline(hands(fist()))
     for _ in range(2):
         pipe.step(FRAME)
     assert any(c[0] == "drag_start" for c in mouse.calls)
@@ -184,7 +190,7 @@ def test_fist_drags_then_release_on_hand_lost():
 
 
 def test_fist_to_point_releases_drag():
-    pipe, mouse, hud, tracker = make_pipeline(hands(fist()))
+    pipe, mouse, _hud, tracker = make_pipeline(hands(fist()))
     for _ in range(2):
         pipe.step(FRAME)
     assert any(c[0] == "drag_start" for c in mouse.calls)
@@ -195,7 +201,7 @@ def test_fist_to_point_releases_drag():
 
 
 def test_v_sign_scrolls_on_upward_motion():
-    pipe, mouse, hud, tracker = make_pipeline(hands(v_sign()))
+    pipe, mouse, _hud, tracker = make_pipeline(hands(v_sign()))
     # stable v_sign, then move hand up in small steps
     for _ in range(2):
         pipe.step(FRAME)
@@ -204,21 +210,20 @@ def test_v_sign_scrolls_on_upward_motion():
 
     moved = list(base)
     for step in range(5):
-        moved[g.INDEX_TIP] = (moved[g.INDEX_TIP][0],
-                              moved[g.INDEX_TIP][1] - 0.05, 0.0)
+        moved[g.INDEX_TIP] = (moved[g.INDEX_TIP][0], moved[g.INDEX_TIP][1] - 0.05, 0.0)
         tracker.result = hands(moved)
         pipe.step(FRAME)
     assert any(c[0] == "scroll" and c[1] > 0 for c in mouse.calls)
 
 
 def test_no_hand_emits_no_actions():
-    pipe, mouse, hud, _ = make_pipeline(HandTrackingResult())
+    pipe, mouse, _hud, _ = make_pipeline(HandTrackingResult())
     assert pipe.step(FRAME) == []
     assert mouse.calls == []
 
 
 def test_swipe_right_hotkeys_alt_tab():
-    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe, mouse, _hud, tracker = make_pipeline(hands(point_hand()))
     for _ in range(2):  # let smoothing warm up
         pipe.step(FRAME)
     tracker.result = None  # freeze pose; inject motion via _prev_move_sx
@@ -231,7 +236,7 @@ def test_swipe_right_hotkeys_alt_tab():
 
 
 def test_swipe_left_hotkeys_alt_shift_tab():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()))
     pipe._prev_move_sx = 900
     pipe._swipe_accum = 0.0
     pipe._swipe_last = 0.0
@@ -240,7 +245,7 @@ def test_swipe_left_hotkeys_alt_shift_tab():
 
 
 def test_swipe_direction_change_resets_accumulator():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()))
     pipe._prev_move_sx = 400
     pipe._swipe_accum = 200.0  # built up rightward
     pipe._swipe_last = 0.0
@@ -251,8 +256,7 @@ def test_swipe_direction_change_resets_accumulator():
 def test_swipe_cooldown_prevents_double_fire():
     import app.perception.pipeline as pipeline_mod
 
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
-    now = 1000.0
+    pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()))
     pipe._prev_move_sx = 400
     pipe._swipe_accum = 250.0
     pipe._swipe_last = 0.0
@@ -272,11 +276,10 @@ def test_thumbs_up_in_chat_emits_confirm():
 
     from conftest import thumb_up_hand
 
-    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
+    pipe, _mouse, _hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
     for _ in range(1):  # one warm-up frame, confirm fires on frame 2
         pipe.step(FRAME)
-    with patch("app.perception.pipeline.time.monotonic",
-               return_value=1000.0):
+    with patch("app.perception.pipeline.time.monotonic", return_value=1000.0):
         actions = pipe.step(FRAME)
     assert any(a.name == "confirm" for a in actions)
 
@@ -287,16 +290,14 @@ def test_thumbs_up_confirm_is_edge_triggered():
 
     from conftest import thumb_up_hand
 
-    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
+    pipe, _mouse, _hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
     for _ in range(1):  # confirm fires on the next (second) frame
         pipe.step(FRAME)
-    with patch("app.perception.pipeline.time.monotonic",
-               return_value=1000.0):
+    with patch("app.perception.pipeline.time.monotonic", return_value=1000.0):
         first = pipe.step(FRAME)
     assert len([a for a in first if a.name == "confirm"]) == 1
     # Holding the thumbs-up must not re-fire.
-    with patch("app.perception.pipeline.time.monotonic",
-               return_value=1001.0):
+    with patch("app.perception.pipeline.time.monotonic", return_value=1001.0):
         held = pipe.step(FRAME)
     assert all(a.name != "confirm" for a in held)
 
@@ -305,14 +306,12 @@ def test_thumbs_up_rearms_after_other_gesture():
     """Leaving the thumbs-up and returning re-arms the confirm trigger."""
     from unittest.mock import patch
 
-    from conftest import thumb_up_hand, point_hand
+    from conftest import point_hand, thumb_up_hand
 
-    pipe, mouse, hud, tracker = make_pipeline(
-        hands(thumb_up_hand()), mode=Mode.CHAT)
+    pipe, _mouse, _hud, tracker = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
     for _ in range(1):
         pipe.step(FRAME)
-    with patch("app.perception.pipeline.time.monotonic",
-               return_value=1000.0):
+    with patch("app.perception.pipeline.time.monotonic", return_value=1000.0):
         assert any(a.name == "confirm" for a in pipe.step(FRAME))
     # Switch to point (allowed in CHAT) then back to thumbs-up.
     tracker.result = hands(point_hand())
@@ -321,8 +320,7 @@ def test_thumbs_up_rearms_after_other_gesture():
     tracker.result = hands(thumb_up_hand())
     for _ in range(1):
         pipe.step(FRAME)
-    with patch("app.perception.pipeline.time.monotonic",
-               return_value=2000.0):
+    with patch("app.perception.pipeline.time.monotonic", return_value=2000.0):
         again = pipe.step(FRAME)
     assert any(a.name == "confirm" for a in again)
 
@@ -330,7 +328,7 @@ def test_thumbs_up_rearms_after_other_gesture():
 def test_thumbs_down_in_chat_emits_cancel():
     from conftest import thumb_down_hand
 
-    pipe, mouse, hud, _ = make_pipeline(hands(thumb_down_hand()), mode=Mode.CHAT)
+    pipe, _mouse, _hud, _ = make_pipeline(hands(thumb_down_hand()), mode=Mode.CHAT)
     for _ in range(1):  # one warm-up frame, cancel fires on frame 2
         pipe.step(FRAME)
     actions = pipe.step(FRAME)
@@ -340,7 +338,7 @@ def test_thumbs_down_in_chat_emits_cancel():
 def test_thumbs_do_not_drag_in_control():
     from conftest import thumb_up_hand
 
-    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CONTROL)
+    pipe, mouse, _hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CONTROL)
     for _ in range(2):
         pipe.step(FRAME)
     assert all(c[0] != "drag_start" for c in mouse.calls)
@@ -349,7 +347,7 @@ def test_thumbs_do_not_drag_in_control():
 def test_pinch_in_chat_is_inert_but_thumbs_still_fire():
     from conftest import thumb_up_hand
 
-    pipe, mouse, hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
+    pipe, _mouse, _hud, _ = make_pipeline(hands(thumb_up_hand()), mode=Mode.CHAT)
     for _ in range(1):
         pipe.step(FRAME)
     actions = pipe.step(FRAME)
@@ -357,7 +355,7 @@ def test_pinch_in_chat_is_inert_but_thumbs_still_fire():
 
 
 def test_hud_emits_skeleton_and_status():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, _mouse, hud, _ = make_pipeline(hands(point_hand()))
     pipe.step(FRAME)
     types = {e["type"] for e in hud.events}
     assert "skeleton" in types
@@ -365,7 +363,7 @@ def test_hud_emits_skeleton_and_status():
 
 
 def test_hud_emits_reticle_on_point():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, _mouse, hud, _ = make_pipeline(hands(point_hand()))
     pipe.step(FRAME)
     reticles = [e for e in hud.events if e["type"] == "reticle"]
     assert reticles
@@ -374,7 +372,7 @@ def test_hud_emits_reticle_on_point():
 
 
 def test_status_reports_gesture_and_clears_on_loss():
-    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe, _mouse, hud, tracker = make_pipeline(hands(point_hand()))
     pipe.step(FRAME)
     statuses = [e for e in hud.events if e["type"] == "status"]
     assert statuses and statuses[-1]["gesture"] == "point"
@@ -390,14 +388,14 @@ def test_status_reports_gesture_and_clears_on_loss():
 
 def test_disallowed_gesture_in_mode_is_inert():
     # CHAT mode does not allow pinch -> no click, no crash.
-    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()), mode=Mode.CHAT)
+    pipe, mouse, _hud, _ = make_pipeline(hands(pinch_hand()), mode=Mode.CHAT)
     for _ in range(2):
         pipe.step(FRAME)
     assert mouse.calls == []
 
 
 def test_smoothing_keeps_steady_hand_steady():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()))
     for _ in range(3):  # become stable so moves fire
         pipe.step(FRAME)
     first = [c for c in mouse.calls if c[0] == "move"][-1][1:]
@@ -408,7 +406,7 @@ def test_smoothing_keeps_steady_hand_steady():
 
 
 def test_stats_recorded():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, _mouse, _hud, _ = make_pipeline(hands(point_hand()))
     pipe.step(FRAME)
     assert pipe.stats.frames == 1
     assert pipe.stats.hands_seen == 1
@@ -419,7 +417,7 @@ def test_fps_tracks_frames_without_detection():
     """fps window must tick even when no hand is in frame."""
     from unittest.mock import patch
 
-    pipe, mouse, hud, _ = make_pipeline(HandTrackingResult(), mode=Mode.CONTROL)
+    pipe, _mouse, _hud, _ = make_pipeline(HandTrackingResult(), mode=Mode.CONTROL)
     pipe._window_start = 1000.0
 
     class _FakeTime:
@@ -443,7 +441,7 @@ def test_hud_throttles_skeleton_but_streams_reticle():
 
     from conftest import point_hand
 
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()))
+    pipe, _mouse, hud, _ = make_pipeline(hands(point_hand()))
 
     class _FakeTime:
         now = 1000.0
@@ -461,7 +459,7 @@ def test_hud_throttles_skeleton_but_streams_reticle():
         pipe.step(FRAME)
         skeletons = [e for e in hud.events if e["type"] == "skeleton"]
         reticles = [e for e in hud.events if e["type"] == "reticle"]
-        assert len(skeletons) == 2          # throttled: only 2 across 2 steps
+        assert len(skeletons) == 2  # throttled: only 2 across 2 steps
         assert len(reticles) == reticles_before + 1  # reticle not throttled
 
 
@@ -469,7 +467,7 @@ def test_loss_grace_keeps_smoothing_then_resets():
     """Transient 1-frame loss keeps the filter; sustained loss resets it."""
     from conftest import point_hand
 
-    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe, _mouse, _hud, tracker = make_pipeline(hands(point_hand()))
     for _ in range(2):
         pipe.step(FRAME)
     assert pipe._smoothing is not None
@@ -489,11 +487,16 @@ def test_default_mapper_built_from_control_config():
     cfg = AppConfig()
     cfg.control.gain_x = 5.0
     pipe = None
-    with patch("app.perception.pipeline.Camera") as cam, \
-            patch("app.perception.pipeline.HandLandmarkerTracker") as tracker:
+    with (
+        patch("app.perception.pipeline.Camera") as cam,
+        patch("app.perception.pipeline.HandLandmarkerTracker"),
+    ):
         pipe = ControlPipeline(
-            config=cfg, mouse=FakeMouse(), hud=FakeHUD(),
-            frame_source=lambda: (True, FRAME))
+            config=cfg,
+            mouse=FakeMouse(),
+            hud=FakeHUD(),
+            frame_source=lambda: (True, FRAME),
+        )
     assert pipe.mapper.config.gain_x == 5.0
     assert pipe.mapper.config.invert_x is True
     cam.assert_called_once_with(0, 640, 480)
@@ -504,16 +507,17 @@ def test_default_virtual_mouse_reads_control_config():
 
     cfg = AppConfig()
     cfg.control.failsafe = False
-    with patch("app.perception.pipeline.VirtualMouse") as vm, \
-            patch("app.perception.pipeline.Camera") as cam, \
-            patch("app.perception.pipeline.HandLandmarkerTracker") as tracker:
-        ControlPipeline(config=cfg, hud=FakeHUD(),
-                        frame_source=lambda: (True, FRAME))
+    with (
+        patch("app.perception.pipeline.VirtualMouse") as vm,
+        patch("app.perception.pipeline.Camera"),
+        patch("app.perception.pipeline.HandLandmarkerTracker"),
+    ):
+        ControlPipeline(config=cfg, hud=FakeHUD(), frame_source=lambda: (True, FRAME))
     vm.assert_called_once_with(failsafe=False)
 
 
 def test_two_hand_spread_toggles_transfer_mode():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    pipe, _mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
     tracker.result = _spread_result()
     for _ in range(pipe.config.control.hold_frames):
         pipe.step(FRAME)
@@ -531,19 +535,21 @@ def test_two_hand_spread_toggles_transfer_mode():
 
 
 def test_hands_touching_is_not_a_spread():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
-    tracker.result = two_hands(_shift(open_hand(), 0.05, 0.0),
-                               _shift(open_hand(), -0.05, 0.0))
+    pipe, _mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = two_hands(
+        _shift(open_hand(), 0.05, 0.0), _shift(open_hand(), -0.05, 0.0)
+    )
     for _ in range(5):
         pipe.step(FRAME)
     assert pipe.modes.mode == Mode.CONTROL
 
 
 def test_primary_hand_prefers_right():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    pipe, mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
     # Right hand = fist (would drag), Left hand = point (would move).
-    tracker.result = two_hands(_shift(fist(), 0.05, 0.0),
-                               _shift(point_hand(), -0.05, 0.0))
+    tracker.result = two_hands(
+        _shift(fist(), 0.05, 0.0), _shift(point_hand(), -0.05, 0.0)
+    )
     for _ in range(pipe.config.control.hold_frames):
         pipe.step(FRAME)
     assert any(c[0] == "drag_start" for c in mouse.calls)
@@ -552,8 +558,7 @@ def test_primary_hand_prefers_right():
 
 def _pinch_zoom_hands(dx):
     """Both hands pinching, palm centers |dx| apart around center."""
-    return two_hands(_shift(pinch_hand(), dx, 0.0),
-                     _shift(pinch_hand(), -dx, 0.0))
+    return two_hands(_shift(pinch_hand(), dx, 0.0), _shift(pinch_hand(), -dx, 0.0))
 
 
 def _zoom_actions(pipe, frames):
@@ -561,18 +566,20 @@ def _zoom_actions(pipe, frames):
 
 
 def test_two_hand_pinch_apart_zooms_in():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    pipe, mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
     tracker.result = _pinch_zoom_hands(0.1)
     assert not [a for a in pipe.step(FRAME) if "zoom" in a.name]  # sets ref
     tracker.result = _pinch_zoom_hands(0.2)  # spread grew by 0.2 -> 4 ticks
     actions = _zoom_actions(pipe, 1)
     assert [a.name for a in actions].count("zoom_in") == 4
     assert not any(a.name == "zoom_out" for a in actions)
-    assert [c for c in mouse.calls if c[0] == "hotkey"].count(("hotkey", ("ctrl", "+"))) == 4
+    assert [c for c in mouse.calls if c[0] == "hotkey"].count(
+        ("hotkey", ("ctrl", "+"))
+    ) == 4
 
 
 def test_two_hand_pinch_together_zooms_out():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    pipe, _mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
     tracker.result = _pinch_zoom_hands(0.3)
     pipe.step(FRAME)
     tracker.result = _pinch_zoom_hands(0.2)  # spread shrank by 0.2 -> 4 ticks
@@ -582,7 +589,7 @@ def test_two_hand_pinch_together_zooms_out():
 
 
 def test_two_hand_zoom_ignores_open_palms():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    pipe, mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
     tracker.result = _spread_result()  # open palms, not pinching
     pipe.step(FRAME)
     pipe.step(FRAME)
@@ -590,16 +597,17 @@ def test_two_hand_zoom_ignores_open_palms():
 
 
 def test_two_hand_zoom_requires_both_pinching():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
-    tracker.result = two_hands(_shift(pinch_hand(), 0.2, 0.0),
-                               _shift(open_hand(), -0.2, 0.0))
+    pipe, mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = two_hands(
+        _shift(pinch_hand(), 0.2, 0.0), _shift(open_hand(), -0.2, 0.0)
+    )
     for _ in range(3):
         pipe.step(FRAME)
     assert not [c for c in mouse.calls if c[0] == "hotkey"]
 
 
 def test_two_hand_zoom_not_in_chat():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CHAT)
+    pipe, mouse, _hud, tracker = make_pipeline(mode=Mode.CHAT)
     tracker.result = _pinch_zoom_hands(0.1)
     pipe.step(FRAME)
     tracker.result = _pinch_zoom_hands(0.2)
@@ -607,7 +615,7 @@ def test_two_hand_zoom_not_in_chat():
 
 
 def test_two_hand_zoom_rearms_after_release_and_hand_loss():
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    pipe, _mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
     tracker.result = _pinch_zoom_hands(0.1)
     pipe.step(FRAME)
     tracker.result = _pinch_zoom_hands(0.2)
@@ -623,7 +631,7 @@ def test_two_hand_zoom_rearms_after_release_and_hand_loss():
 
 
 def test_open_palm_catch_in_transfer_fires_once():
-    pipe, mouse, hud, _ = make_pipeline(hands(open_hand()), mode=Mode.TRANSFER)
+    pipe, _mouse, _hud, _ = make_pipeline(hands(open_hand()), mode=Mode.TRANSFER)
     all_actions = []
     for _ in range(3):
         all_actions.extend(pipe.step(FRAME))
@@ -633,7 +641,7 @@ def test_open_palm_catch_in_transfer_fires_once():
 
 
 def test_open_palm_release_in_chat_fires_once():
-    pipe, mouse, hud, _ = make_pipeline(hands(open_hand()), mode=Mode.CHAT)
+    pipe, _mouse, _hud, _ = make_pipeline(hands(open_hand()), mode=Mode.CHAT)
     all_actions = []
     for _ in range(3):
         all_actions.extend(pipe.step(FRAME))
@@ -642,24 +650,21 @@ def test_open_palm_release_in_chat_fires_once():
 
 
 def test_presentation_point_moves_cursor():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()),
-                                        mode=Mode.PRESENTATION)
+    pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()), mode=Mode.PRESENTATION)
     for _ in range(pipe.config.control.hold_frames):
         pipe.step(FRAME)
     assert any(c[0] == "move" for c in mouse.calls)
 
 
 def test_presentation_pinch_is_inert():
-    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()),
-                                        mode=Mode.PRESENTATION)
+    pipe, mouse, _hud, _ = make_pipeline(hands(pinch_hand()), mode=Mode.PRESENTATION)
     for _ in range(3):
         pipe.step(FRAME)
     assert not any(c[0] in ("click", "right_click") for c in mouse.calls)
 
 
 def test_presentation_swipe_navigates_slides():
-    pipe, mouse, hud, _ = make_pipeline(hands(point_hand()),
-                                        mode=Mode.PRESENTATION)
+    pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()), mode=Mode.PRESENTATION)
     pipe._prev_move_sx = 400
     pipe._swipe_accum = 0.0
     pipe._swipe_last = 0.0
@@ -676,8 +681,9 @@ def test_presentation_swipe_navigates_slides():
 def test_presentation_v_sign_navigates_slides():
     from conftest import v_sign as v_sign_hand
 
-    pipe, mouse, hud, tracker = make_pipeline(hands(v_sign_hand()),
-                                              mode=Mode.PRESENTATION)
+    pipe, mouse, _hud, tracker = make_pipeline(
+        hands(v_sign_hand()), mode=Mode.PRESENTATION
+    )
     # Stable V-sign (seeds the reference), then move the hand up in the frame.
     for _ in range(2):
         pipe.step(FRAME)
@@ -690,6 +696,7 @@ def test_presentation_v_sign_navigates_slides():
 # --------------------------------------------------------------------------- #
 # Circle / index-trace attention ("Jarvis")
 # --------------------------------------------------------------------------- #
+
 
 def _circle_steps(n=18, r=0.1):
     """Frame-by-frame tracker results sweeping the pointing hand in a circle."""
@@ -704,7 +711,7 @@ def _circle_steps(n=18, r=0.1):
 
 
 def test_circle_trace_fires_attention():
-    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe, _mouse, _hud, tracker = make_pipeline(hands(point_hand()))
     called = []
     pipe.on_attention = lambda: called.append(1)
     actions = []
@@ -718,7 +725,7 @@ def test_circle_trace_fires_attention():
 
 
 def test_circle_trace_cooldown_prevents_repeat():
-    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe, _mouse, _hud, tracker = make_pipeline(hands(point_hand()))
     actions = []
     for _ in range(2):
         for result in _circle_steps():
@@ -728,7 +735,7 @@ def test_circle_trace_cooldown_prevents_repeat():
 
 
 def test_line_sweep_is_not_attention():
-    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe, _mouse, _hud, tracker = make_pipeline(hands(point_hand()))
     base = point_hand()
     actions = []
     for i in range(24):
@@ -739,7 +746,7 @@ def test_line_sweep_is_not_attention():
 
 def test_breaking_pose_resets_trace():
     """An open palm mid-trace resets the accumulated trajectory."""
-    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    pipe, _mouse, _hud, tracker = make_pipeline(hands(point_hand()))
     actions = []
     for result in _circle_steps(n=8):  # half a circle, not enough
         tracker.result = result
@@ -756,8 +763,9 @@ def test_breaking_pose_resets_trace():
 # Misfire guards
 # --------------------------------------------------------------------------- #
 
+
 def test_pinch_rearms_after_other_gesture():
-    pipe, mouse, hud, tracker = make_pipeline(hands(pinch_hand()))
+    pipe, mouse, _hud, tracker = make_pipeline(hands(pinch_hand()))
     for _ in range(2):
         pipe.step(FRAME)
     assert len([c for c in mouse.calls if c[0] == "click"]) == 1
@@ -771,7 +779,7 @@ def test_pinch_rearms_after_other_gesture():
 
 
 def test_two_finger_pinch_rearms_after_other_gesture():
-    pipe, mouse, hud, tracker = make_pipeline(hands(two_pinch_hand()))
+    pipe, mouse, _hud, tracker = make_pipeline(hands(two_pinch_hand()))
     for _ in range(2):
         pipe.step(FRAME)
     assert len([c for c in mouse.calls if c[0] == "right_click"]) == 1
@@ -786,7 +794,7 @@ def test_two_finger_pinch_rearms_after_other_gesture():
 
 def test_spread_frame_does_not_fire_catch():
     """Two open palms = spread/rest: mode toggles, catch is suppressed."""
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    pipe, _mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
     tracker.result = _spread_result()
     actions = []
     for _ in range(pipe.config.control.hold_frames + 1):
@@ -797,9 +805,10 @@ def test_spread_frame_does_not_fire_catch():
 
 def test_two_hand_rest_suppresses_open_palm_in_chat():
     """Both hands up relaxed in Chat must not fire 'release'."""
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CHAT)
-    tracker.result = two_hands(_shift(open_hand(), 0.15, 0.0),
-                               _shift(open_hand(), -0.15, 0.0))
+    pipe, _mouse, _hud, tracker = make_pipeline(mode=Mode.CHAT)
+    tracker.result = two_hands(
+        _shift(open_hand(), 0.15, 0.0), _shift(open_hand(), -0.15, 0.0)
+    )
     actions = []
     for _ in range(4):
         actions.extend(pipe.step(FRAME))
@@ -815,9 +824,10 @@ def test_two_hand_rest_suppresses_open_palm_in_chat():
 def test_two_hand_deliberate_primary_still_acts():
     """Rest-pose suppression only kicks in for rest; a deliberate primary
     pinch still clicks even with a second hand present."""
-    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
-    tracker.result = two_hands(_shift(pinch_hand(), 0.1, 0.0),
-                               _shift(fist(), -0.1, 0.0))
+    pipe, mouse, _hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = two_hands(
+        _shift(pinch_hand(), 0.1, 0.0), _shift(fist(), -0.1, 0.0)
+    )
     for _ in range(2):
         pipe.step(FRAME)
     assert any(c[0] == "click" for c in mouse.calls)
@@ -826,6 +836,7 @@ def test_two_hand_deliberate_primary_still_acts():
 # ------------------------------------------------------------------ #
 # Modifier hand scaffold (Phase 2 second-hand interaction)
 # ------------------------------------------------------------------ #
+
 
 def test_modifier_hand_none_with_single_hand():
     pipe, *_ = make_pipeline()
@@ -840,9 +851,11 @@ def test_modifier_hand_none_without_handedness_labels():
 
 def test_modifier_hand_is_secondary_non_preferred():
     pipe, *_ = make_pipeline()
-    mod = pipe._modifier_hand(two_hands(
-        _shift(open_hand(), 0.3, 0.0),   # primary (Right)
-        _shift(fist(), -0.3, 0.0)))      # secondary (Left)
+    mod = pipe._modifier_hand(
+        two_hands(
+            _shift(open_hand(), 0.3, 0.0), _shift(fist(), -0.3, 0.0)  # primary (Right)
+        )
+    )  # secondary (Left)
     assert mod is not None
     assert mod.fist is True
     assert mod.finger_count == 0
@@ -851,9 +864,9 @@ def test_modifier_hand_is_secondary_non_preferred():
 
 def test_modifier_hand_finger_count():
     pipe, *_ = make_pipeline()
-    mod = pipe._modifier_hand(two_hands(
-        _shift(point_hand(), 0.3, 0.0),
-        _shift(v_sign(), -0.3, 0.0)))
+    mod = pipe._modifier_hand(
+        two_hands(_shift(point_hand(), 0.3, 0.0), _shift(v_sign(), -0.3, 0.0))
+    )
     assert mod is not None
     assert mod.finger_count == 2  # index + middle
     assert mod.fist is False
@@ -861,9 +874,9 @@ def test_modifier_hand_finger_count():
 
 def test_modifier_hand_open_palm():
     pipe, *_ = make_pipeline()
-    mod = pipe._modifier_hand(two_hands(
-        _shift(point_hand(), 0.3, 0.0),
-        _shift(open_hand(), -0.3, 0.0)))
+    mod = pipe._modifier_hand(
+        two_hands(_shift(point_hand(), 0.3, 0.0), _shift(open_hand(), -0.3, 0.0))
+    )
     assert mod is not None
     assert mod.open_palm is True
     assert mod.finger_count == 4
@@ -872,14 +885,14 @@ def test_modifier_hand_open_palm():
 def test_modifier_hand_lateral_zone_tracks_secondary_x():
     pipe, *_ = make_pipeline()
     # Secondary pushed far left in frame -> LEFT zone.
-    mod_left = pipe._modifier_hand(two_hands(
-        _shift(open_hand(), 0.3, 0.0),
-        _shift(open_hand(), -0.35, 0.0)))
+    mod_left = pipe._modifier_hand(
+        two_hands(_shift(open_hand(), 0.3, 0.0), _shift(open_hand(), -0.35, 0.0))
+    )
     assert mod_left.lateral.value == "left"
     # Secondary pushed far right -> RIGHT zone.
-    mod_right = pipe._modifier_hand(two_hands(
-        _shift(open_hand(), -0.3, 0.0),
-        _shift(open_hand(), 0.35, 0.0)))
+    mod_right = pipe._modifier_hand(
+        two_hands(_shift(open_hand(), -0.3, 0.0), _shift(open_hand(), 0.35, 0.0))
+    )
     assert mod_right.lateral.value == "right"
 
 
@@ -887,10 +900,11 @@ def test_modifier_hand_lateral_zone_tracks_secondary_x():
 # Modifier wiring: fist menu + finger-count / passive-zone monitor selection
 # --------------------------------------------------------------------------- #
 
-from unittest.mock import patch  # noqa: E402
+from unittest.mock import patch
 
-from app.control.menu import MenuState  # noqa: E402
-from conftest import thumb_up_hand  # noqa: E402
+from conftest import thumb_up_hand
+
+from app.control.menu import MenuState
 
 
 class _Clock:
@@ -913,8 +927,7 @@ def step_actions(pipe, clock_now):
 
 def test_modifier_fist_hold_opens_menu():
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                       _shift(fist(), -0.3, 0.0))
+    result = two_hands(_shift(point_hand(), 0.3, 0.0), _shift(fist(), -0.3, 0.0))
     pipe.tracker.result = result
     step_actions(pipe, 1000.0)  # arms the hold timer
     assert pipe._menu.state is MenuState.CLOSED
@@ -926,8 +939,7 @@ def test_modifier_fist_hold_opens_menu():
 def test_modifier_fist_release_does_not_close_menu():
     """The menu is sticky once open; dropping the trigger fist keeps it."""
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    two = lambda secondary: two_hands(  # noqa: E731
-        _shift(point_hand(), 0.3, 0.0), secondary)
+    two = lambda secondary: two_hands(_shift(point_hand(), 0.3, 0.0), secondary)
     pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens
@@ -940,13 +952,13 @@ def test_modifier_fist_release_does_not_close_menu():
 def test_modifier_menu_confirm_mode_change():
     """Point up-left into Modes, pinch -> mode.change; no stray click."""
     pipe, mouse, *_ = make_pipeline(monitors=make_two_monitors())
-    two = lambda secondary: two_hands(  # noqa: E731
-        _shift(point_hand(), -0.3, -0.3), secondary)
+    two = lambda secondary: two_hands(_shift(point_hand(), -0.3, -0.3), secondary)
     pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens menu
-    pipe.tracker.result = two_hands(_shift(pinch_hand(), -0.3, -0.3),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(pinch_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     actions = step_actions(pipe, 1000.35)
     names = [a.name for a in actions]
     assert "menu.confirm" in names
@@ -959,13 +971,13 @@ def test_modifier_menu_confirm_mode_change():
 def test_modifier_menu_confirm_screen():
     """Point east into Screens, pinch -> screen.select(0)."""
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    two = lambda secondary: two_hands(  # noqa: E731
-        _shift(point_hand(), -0.3, -0.3), secondary)
+    two = lambda secondary: two_hands(_shift(point_hand(), -0.3, -0.3), secondary)
     pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens menu
-    pipe.tracker.result = two_hands(_shift(pinch_hand(), -0.3, 0.0),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(pinch_hand(), -0.3, 0.0), _shift(fist(), -0.3, 0.0)
+    )
     actions = step_actions(pipe, 1000.35)
     assert ("screen.select", (0,)) in [(a.name, a.args) for a in actions]
     assert pipe.mapper.config.active_monitor == 0
@@ -973,12 +985,14 @@ def test_modifier_menu_confirm_screen():
 
 def test_modifier_menu_cancel_open_palm():
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens menu
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(open_hand(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(open_hand(), -0.3, 0.0)
+    )
     actions = step_actions(pipe, 1000.35)
     assert "menu.cancel" in [a.name for a in actions]
     assert pipe._menu.state is MenuState.CLOSED
@@ -986,34 +1000,35 @@ def test_modifier_menu_cancel_open_palm():
 
 def test_modifier_menu_timeout_closes():
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens menu
     actions = step_actions(pipe, 1000.3 + 5.1)  # past menu_timeout_ms (5000)
-    assert any(a.name == "menu.close" and a.gesture == "timeout"
-               for a in actions)
+    assert any(a.name == "menu.close" and a.gesture == "timeout" for a in actions)
     assert pipe._menu.state is MenuState.CLOSED
 
 
 def test_modifier_menu_hand_lost_closes():
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens menu
     pipe.tracker.result = HandTrackingResult()  # no hands at all
     actions = step_actions(pipe, 1000.4)
-    assert any(a.name == "menu.close" and a.gesture == "hand_lost"
-               for a in actions)
+    assert any(a.name == "menu.close" and a.gesture == "hand_lost" for a in actions)
     assert pipe._menu.state is MenuState.CLOSED
 
 
 def test_modifier_finger_count_selects_monitor():
     """Two extended fingers on the secondary -> monitor 2 (index 1)."""
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(v_sign(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(v_sign(), -0.3, 0.0)
+    )
     seen = []
     for i in range(pipe.config.control.hold_frames):
         seen.extend(step_actions(pipe, 1000.0 + 0.05 * i))
@@ -1024,8 +1039,9 @@ def test_modifier_finger_count_selects_monitor():
 def test_modifier_five_fingers_needs_primary_pointing():
     """Open palm on the secondary = monitor 5 only while the primary points."""
     pipe, *_ = make_pipeline(monitors=[(0, 0, 1000, 800)] * 5)
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(open_hand(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(open_hand(), -0.3, 0.0)
+    )
     seen = []
     for i in range(pipe.config.control.hold_frames):
         seen.extend(step_actions(pipe, 1000.0 + 0.05 * i))
@@ -1035,8 +1051,9 @@ def test_modifier_five_fingers_needs_primary_pointing():
 
 def test_modifier_both_open_palms_is_rest_no_select():
     pipe, *_ = make_pipeline(monitors=[(0, 0, 1000, 800)] * 5)
-    pipe.tracker.result = two_hands(_shift(open_hand(), 0.1, 0.0),
-                                    _shift(open_hand(), -0.1, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(open_hand(), 0.1, 0.0), _shift(open_hand(), -0.1, 0.0)
+    )
     seen = []
     for i in range(pipe.config.control.hold_frames + 1):
         seen.extend(step_actions(pipe, 1000.0 + 0.05 * i))
@@ -1046,8 +1063,9 @@ def test_modifier_both_open_palms_is_rest_no_select():
 
 def test_modifier_passive_zone_selects_left():
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(thumb_up_hand(), -0.35, 0.0)
+    )
     step_actions(pipe, 1000.0)  # arms the zone hold
     actions = step_actions(pipe, 1000.35)  # 350ms > zone_hold_ms (300)
     assert ("screen.select", (0,)) in [(a.name, a.args) for a in actions]
@@ -1056,16 +1074,19 @@ def test_modifier_passive_zone_selects_left():
 
 def test_modifier_passive_zone_requires_hold():
     pipe, *_ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(thumb_up_hand(), -0.35, 0.0)
+    )
     seen = [*step_actions(pipe, 1000.0)]  # LEFT zone armed
     # Break the hold by drifting back to center before the window elapses.
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(thumb_up_hand(), 0.0, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(thumb_up_hand(), 0.0, 0.0)
+    )
     seen.extend(step_actions(pipe, 1000.1))
     # Re-enter the zone: the hold timer restarts, so nothing fires yet.
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(thumb_up_hand(), -0.35, 0.0)
+    )
     seen.extend(step_actions(pipe, 1000.4))
     assert not any(a.name == "screen.select" for a in seen)
     assert pipe.mapper.config.active_monitor is None
@@ -1075,8 +1096,9 @@ def test_modifier_passive_zone_hold_zero_disables():
     cfg = AppConfig()
     cfg.control.zone_hold_ms = 0
     pipe, *_ = make_pipeline(monitors=make_two_monitors(), config=cfg)
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(thumb_up_hand(), -0.35, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(thumb_up_hand(), -0.35, 0.0)
+    )
     seen = []
     for i in range(pipe.config.control.hold_frames + 1):
         seen.extend(step_actions(pipe, 1000.0 + 0.2 * i))
@@ -1085,8 +1107,9 @@ def test_modifier_passive_zone_hold_zero_disables():
 
 def test_modifier_idle_does_not_open_menu():
     pipe, *_ = make_pipeline(mode=Mode.IDLE, monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), 0.3, 0.0),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), 0.3, 0.0), _shift(fist(), -0.3, 0.0)
+    )
     actions = step_actions(pipe, 1000.0)
     assert "menu.open" not in [a.name for a in actions]
     assert pipe._menu.state is MenuState.CLOSED
@@ -1107,8 +1130,9 @@ def menu_events(hud):
 
 def test_menu_event_broadcast_on_open():
     pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens menu
     evs = menu_events(hud)
@@ -1123,26 +1147,31 @@ def test_menu_event_broadcast_on_open():
 
 def test_menu_event_highlight_tracks_reticle():
     pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens
     # Move the primary reticle east (hand shifted left, selfie mirror).
-    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, 0.0),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, 0.0), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.4)
-    assert any(e["state"] == "open" and e["category"] == "screens"
-               for e in menu_events(hud))
+    assert any(
+        e["state"] == "open" and e["category"] == "screens" for e in menu_events(hud)
+    )
 
 
 def test_menu_event_confirm_emits_closed():
     pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens
-    pipe.tracker.result = two_hands(_shift(pinch_hand(), -0.3, -0.3),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(pinch_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.35)  # pinch confirms mode.control
     assert menu_events(hud)[-1]["state"] == "closed"
 
@@ -1150,6 +1179,7 @@ def test_menu_event_confirm_emits_closed():
 # ------------------------------------------------------------------ #
 # ADR-011: registry dispatch + Gestures menu category
 # ------------------------------------------------------------------ #
+
 
 def test_registry_dispatch_resolves_mode_bindings():
     """_dispatch consults the binding registry, not hardcoded branches."""
@@ -1172,7 +1202,7 @@ def test_gesture_toggle_disables_pinch():
 
 
 def test_gesture_toggle_reenables_pinch():
-    pipe, mouse, *_ = make_pipeline()
+    pipe, _mouse, *_ = make_pipeline()
     pipe._registry.set_enabled("click.left", False)
     pipe._registry.set_enabled("click.left", True)
     pipe.tracker.result = hands(pinch_hand())
@@ -1184,8 +1214,9 @@ def test_gesture_toggle_reenables_pinch():
 
 def test_gestures_menu_category_lists_actions():
     pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
-    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(point_hand(), -0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens
     ev = menu_events(hud)[-1]
@@ -1200,19 +1231,20 @@ def test_gestures_menu_category_lists_actions():
 def test_gestures_menu_confirm_toggles_binding():
     """Confirming the row under the pointer flips that action off."""
     pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
-    two = lambda secondary: two_hands(  # noqa: E731
-        _shift(point_hand(), 0.3, -0.3), secondary)  # top-left = Gestures wedge
+    two = lambda secondary: two_hands(
+        _shift(point_hand(), 0.3, -0.3), secondary
+    )  # top-left = Gestures wedge
     pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
     step_actions(pipe, 1000.0)
     step_actions(pipe, 1000.3)  # opens
     step_actions(pipe, 1000.33)  # highlight Gestures category
     assert pipe._menu.category_idx == 4
     # The row under the Gestures wedge is item 7 (catch).
-    pipe.tracker.result = two_hands(_shift(pinch_hand(), 0.3, -0.3),
-                                    _shift(fist(), -0.3, 0.0))
+    pipe.tracker.result = two_hands(
+        _shift(pinch_hand(), 0.3, -0.3), _shift(fist(), -0.3, 0.0)
+    )
     actions = step_actions(pipe, 1000.35)  # pinch confirms the same row
-    assert ("gesture.toggle", ("catch", False)) in [
-        (a.name, a.args) for a in actions]
+    assert ("gesture.toggle", ("catch", False)) in [(a.name, a.args) for a in actions]
     # open_palm no longer resolves in Transfer -> catch is inert.
     assert pipe._registry.resolve("open_palm", "transfer") is None
     assert pipe._registry.resolve("open_palm", "chat") == "release"

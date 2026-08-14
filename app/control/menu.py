@@ -51,8 +51,8 @@ def pie_index(dx: float, dy: float, n: int) -> int:
     """
     if n <= 1:
         return 0
-    ang = math.degrees(math.atan2(dy, dx))        # -180..180, 0 = east
-    angle_from_top = (ang + 90.0) % 360.0         # 0 = top, clockwise positive
+    ang = math.degrees(math.atan2(dy, dx))  # -180..180, 0 = east
+    angle_from_top = (ang + 90.0) % 360.0  # 0 = top, clockwise positive
     return int(angle_from_top / 360.0 * n) % n
 
 

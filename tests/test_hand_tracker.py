@@ -68,18 +68,24 @@ def test_tracker_without_model_and_no_download_is_unavailable():
 
 
 def test_tracker_with_existing_model_builds():
-    import numpy as np
     from unittest.mock import Mock, patch
+
+    import numpy as np
 
     t = HandLandmarkerTracker(model_path="fake.task", auto_download=False)
     landmarker = Mock()
     landmarker.detect_for_video.return_value = Mock(
-        hand_landmarks=None, handedness=None)
-    with patch("pathlib.Path.exists", return_value=True), \
-            patch("mediapipe.tasks.python.BaseOptions"), \
-            patch("mediapipe.tasks.python.vision.HandLandmarkerOptions"), \
-            patch("mediapipe.tasks.python.vision.HandLandmarker"
-                  ".create_from_options", return_value=landmarker):
+        hand_landmarks=None, handedness=None
+    )
+    with (
+        patch("pathlib.Path.exists", return_value=True),
+        patch("mediapipe.tasks.python.BaseOptions"),
+        patch("mediapipe.tasks.python.vision.HandLandmarkerOptions"),
+        patch(
+            "mediapipe.tasks.python.vision.HandLandmarker" ".create_from_options",
+            return_value=landmarker,
+        ),
+    ):
         assert t.available is True
         result = t.process(np.zeros((10, 10, 3), dtype=np.uint8))
     assert result.detected is False
@@ -88,8 +94,9 @@ def test_tracker_with_existing_model_builds():
 
 def test_tracker_parses_real_result_shape():
     """MediaPipe returns per-hand lists: hand_landmarks=[hand...], handedness=[[Category]]."""
-    import numpy as np
     from unittest.mock import Mock, patch
+
+    import numpy as np
 
     t = HandLandmarkerTracker(model_path="fake.task", auto_download=False)
     landmarker = Mock()
@@ -106,11 +113,15 @@ def test_tracker_parses_real_result_shape():
     result.hand_landmarks = [[_lm(0.1, 0.2, 0.3)] * 21]
     result.handedness = [[_Cat()]]
     landmarker.detect_for_video.return_value = result
-    with patch("pathlib.Path.exists", return_value=True), \
-            patch("mediapipe.tasks.python.BaseOptions"), \
-            patch("mediapipe.tasks.python.vision.HandLandmarkerOptions"), \
-            patch("mediapipe.tasks.python.vision.HandLandmarker"
-                  ".create_from_options", return_value=landmarker):
+    with (
+        patch("pathlib.Path.exists", return_value=True),
+        patch("mediapipe.tasks.python.BaseOptions"),
+        patch("mediapipe.tasks.python.vision.HandLandmarkerOptions"),
+        patch(
+            "mediapipe.tasks.python.vision.HandLandmarker" ".create_from_options",
+            return_value=landmarker,
+        ),
+    ):
         assert t.available is True
         res = t.process(np.zeros((10, 10, 3), dtype=np.uint8))
     assert res.detected is True

@@ -12,23 +12,33 @@ from app.control.menu import (
 
 
 def sample_menu() -> RadialMenu:
-    return RadialMenu([
-        MenuCategory("screens", "Screens", items=[
-            MenuItem("monitor_1", "Monitor 1", action_id="screen.1"),
-            MenuItem("monitor_2", "Monitor 2", action_id="screen.2"),
-        ]),
-        MenuCategory("modes", "Modes", items=[
-            MenuItem("control", "Control", action_id="mode.control"),
-            MenuItem("chat", "Chat", action_id="mode.chat"),
-        ]),
-        MenuCategory("empty", "Empty"),  # hidden (no items)
-    ])
+    return RadialMenu(
+        [
+            MenuCategory(
+                "screens",
+                "Screens",
+                items=[
+                    MenuItem("monitor_1", "Monitor 1", action_id="screen.1"),
+                    MenuItem("monitor_2", "Monitor 2", action_id="screen.2"),
+                ],
+            ),
+            MenuCategory(
+                "modes",
+                "Modes",
+                items=[
+                    MenuItem("control", "Control", action_id="mode.control"),
+                    MenuItem("chat", "Chat", action_id="mode.chat"),
+                ],
+            ),
+            MenuCategory("empty", "Empty"),  # hidden (no items)
+        ]
+    )
 
 
 def test_pie_index_top_is_zero_clockwise():
     assert pie_index(0.0, -1.0, 4) == 0  # north = top
-    assert pie_index(1.0, 0.0, 4) == 1   # east
-    assert pie_index(0.0, 1.0, 4) == 2   # south
+    assert pie_index(1.0, 0.0, 4) == 1  # east
+    assert pie_index(0.0, 1.0, 4) == 2  # south
     assert pie_index(-1.0, 0.0, 4) == 3  # west
 
 

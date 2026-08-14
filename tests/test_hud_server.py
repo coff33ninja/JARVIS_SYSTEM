@@ -68,7 +68,7 @@ def test_server_serves_index_html(server):
 def test_client_count_reflects_connections(server):
     async def run():
         uri = f"ws://{server.config.host}:{server.config.port}"
-        async with websockets.connect(uri) as ws:
+        async with websockets.connect(uri):
             await asyncio.sleep(0.2)
             assert server.client_count() >= 1
         await asyncio.sleep(0.2)

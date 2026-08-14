@@ -44,8 +44,10 @@ def fit_homography(src: list[Point], dst: list[Point]) -> Homography | None:
     a = np.asarray(rows, dtype=np.float64)
     _, singular, vt = np.linalg.svd(a)
     if singular[-1] <= _DEGENERATE_RATIO * singular[0]:
-        logger.warning("homography fit is degenerate (collinear/duplicate "
-                       "points, n=%d)", len(src))
+        logger.warning(
+            "homography fit is degenerate (collinear/duplicate " "points, n=%d)",
+            len(src),
+        )
         return None
     h = vt[-1].reshape((3, 3))
     if abs(h[2, 2]) < 1e-12:

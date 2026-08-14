@@ -35,7 +35,9 @@ def _decode_vector(blob: bytes) -> np.ndarray:
 class Recaller:
     """Query-time hybrid retrieval against a :class:`MemoryStore`."""
 
-    def __init__(self, store: MemoryStore, embedder=None, config: RecallConfig | None = None):
+    def __init__(
+        self, store: MemoryStore, embedder=None, config: RecallConfig | None = None
+    ):
         self.store = store
         self.embedder = embedder
         self.config = config or RecallConfig()
@@ -75,7 +77,9 @@ class Recaller:
             elif kw_hits and not sem_hits:
                 source = "keyword"
             results.append(
-                ScoredHit(table, row_id, acc["content"], acc["score"], source, acc["extra"])
+                ScoredHit(
+                    table, row_id, acc["content"], acc["score"], source, acc["extra"]
+                )
             )
         results.sort(key=lambda r: r.score, reverse=True)
         return [r for r in results[:limit] if r.score >= floor]
@@ -126,7 +130,9 @@ class Recaller:
     def _keyword_hits(self, query: str, limit: int) -> list[ScoredHit]:
         rows = self.store.keyword_search(query, limit=limit)
         return [
-            ScoredHit(r["table"], r["row_id"], r["content"], float(r["score"]), "keyword", r)
+            ScoredHit(
+                r["table"], r["row_id"], r["content"], float(r["score"]), "keyword", r
+            )
             for r in rows
         ]
 
@@ -161,9 +167,7 @@ class Recaller:
         ]
 
     @staticmethod
-    def _accumulate(
-        fused: dict, hit: ScoredHit, contribution: float
-    ) -> None:
+    def _accumulate(fused: dict, hit: ScoredHit, contribution: float) -> None:
         key = (hit.table, hit.row_id)
         acc = fused.setdefault(
             key, {"score": 0.0, "content": hit.content, "extra": hit.extra}

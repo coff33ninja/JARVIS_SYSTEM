@@ -41,7 +41,11 @@ def _plain(text):
 
 
 def _tool_call(tc_id, name, arguments):
-    return {"role": "assistant", "content": "", "tool_calls": [{"id": tc_id, "name": name, "arguments": arguments}]}
+    return {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{"id": tc_id, "name": name, "arguments": arguments}],
+    }
 
 
 def make_agent(store, llm, **kwargs):
@@ -70,10 +74,12 @@ def test_system_prompt_has_context_and_memories(store):
 
 
 def test_tool_call_remember_then_reply(store):
-    llm = StubLLM([
-        _tool_call("c1", "remember", {"content": "User likes tea"}),
-        _plain("remembered"),
-    ])
+    llm = StubLLM(
+        [
+            _tool_call("c1", "remember", {"content": "User likes tea"}),
+            _plain("remembered"),
+        ]
+    )
     agent = make_agent(store, llm)
     reply = agent.handle_turn("remember I like tea")
     assert reply == "remembered"
@@ -87,10 +93,12 @@ def test_tool_call_remember_then_reply(store):
 
 
 def test_unknown_tool_result_is_safe(store):
-    llm = StubLLM([
-        _tool_call("c2", "definitely_not_a_tool", {}),
-        _plain("recovered"),
-    ])
+    llm = StubLLM(
+        [
+            _tool_call("c2", "definitely_not_a_tool", {}),
+            _plain("recovered"),
+        ]
+    )
     agent = make_agent(store, llm)
     reply = agent.handle_turn("do the impossible")
     assert reply == "recovered"
@@ -98,14 +106,16 @@ def test_unknown_tool_result_is_safe(store):
 
 
 def test_max_iterations_bounded(store):
-    llm = StubLLM([
-        _tool_call("c3", "recall", {"query": "x"}),
-        _tool_call("c4", "recall", {"query": "x"}),
-        _tool_call("c5", "recall", {"query": "x"}),
-        _tool_call("c6", "recall", {"query": "x"}),
-        _tool_call("c7", "recall", {"query": "x"}),
-        _tool_call("c8", "recall", {"query": "x"}),  # 6th call, beyond limit
-    ])
+    llm = StubLLM(
+        [
+            _tool_call("c3", "recall", {"query": "x"}),
+            _tool_call("c4", "recall", {"query": "x"}),
+            _tool_call("c5", "recall", {"query": "x"}),
+            _tool_call("c6", "recall", {"query": "x"}),
+            _tool_call("c7", "recall", {"query": "x"}),
+            _tool_call("c8", "recall", {"query": "x"}),  # 6th call, beyond limit
+        ]
+    )
     agent = make_agent(store, llm, config=AgentConfig(max_tool_iterations=5))
     reply = agent.handle_turn("loop forever")
     assert "no final answer" in reply

@@ -7,7 +7,7 @@ import pytest
 
 from app.agent.recall.config import EmbedderConfig
 from app.agent.recall.store import MemoryStore
-from app.perception.geometry import (  # noqa: F401  (landmark indices for helpers)
+from app.perception.geometry import (
     INDEX_TIP,
     MIDDLE_TIP,
     THUMB_IP,
@@ -87,8 +87,12 @@ _DIR = {
     "pinky": (0.10, -1.0),
 }
 _LEN = {"index": 0.10, "middle": 0.11, "ring": 0.10, "pinky": 0.09}
-_THUMB = {"cmc": (0.62, 0.54, 0.0), "mcp": (0.66, 0.50, 0.0),
-          "ip": (0.70, 0.46, 0.0), "tip": (0.73, 0.43, 0.0)}
+_THUMB = {
+    "cmc": (0.62, 0.54, 0.0),
+    "mcp": (0.66, 0.50, 0.0),
+    "ip": (0.70, 0.46, 0.0),
+    "tip": (0.73, 0.43, 0.0),
+}
 
 
 def _lerp(a, b, t):
@@ -112,8 +116,7 @@ def make_hand(fingers=None, pinch="none", thumb_tip=None):
         mcp = _MCP[name]
         dx, dy = _DIR[name]
         ext = max(0.0, min(1.0, fingers.get(name, 1.0)))
-        tip = (mcp[0] + dx * _LEN[name] * ext,
-               mcp[1] + dy * _LEN[name] * ext, 0.0)
+        tip = (mcp[0] + dx * _LEN[name] * ext, mcp[1] + dy * _LEN[name] * ext, 0.0)
         pip = _lerp(mcp, tip, 0.35)
         dip = _lerp(mcp, tip, 0.62)
         lm.extend((mcp, pip, dip, tip))
@@ -135,8 +138,10 @@ def open_hand():
 def fist():
     # A real fist tucks the thumb across the palm, so the thumb reads as
     # curled too (otherwise it would classify as thumbs_up).
-    return make_hand({"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0},
-                     thumb_tip=(0.53, 0.52, 0.0))
+    return make_hand(
+        {"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0},
+        thumb_tip=(0.53, 0.52, 0.0),
+    )
 
 
 def thumb_up_hand():
@@ -147,8 +152,10 @@ def thumb_up_hand():
 
 def thumb_down_hand():
     # Thumb extended below the MCP (tip y > mcp y in screen space).
-    return make_hand({"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0},
-                     thumb_tip=(0.73, 0.58, 0.0))
+    return make_hand(
+        {"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0},
+        thumb_tip=(0.73, 0.58, 0.0),
+    )
 
 
 def v_sign():
@@ -160,10 +167,12 @@ def point_hand():
 
 
 def pinch_hand():
-    return make_hand(fingers={"index": 1.0, "middle": 0.0, "ring": 0.0,
-                              "pinky": 0.0}, pinch="index")
+    return make_hand(
+        fingers={"index": 1.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0}, pinch="index"
+    )
 
 
 def two_pinch_hand():
-    return make_hand(fingers={"index": 0.0, "middle": 1.0, "ring": 0.0,
-                              "pinky": 0.0}, pinch="middle")
+    return make_hand(
+        fingers={"index": 0.0, "middle": 1.0, "ring": 0.0, "pinky": 0.0}, pinch="middle"
+    )

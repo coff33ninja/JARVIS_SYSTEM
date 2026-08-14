@@ -67,7 +67,9 @@ class Agent:
             sid = uuid.uuid4().hex
             self.session_id = sid
 
-        history = self.recaller.recall_history(session_id=sid, limit=self.config.history_limit)
+        history = self.recaller.recall_history(
+            session_id=sid, limit=self.config.history_limit
+        )
         memories = self.recaller.remember(text, limit=self.config.memory_limit)
 
         messages: list[dict] = [
@@ -92,11 +94,13 @@ class Agent:
             for call in response["tool_calls"]:
                 result = self.registry.execute(call["name"], call["arguments"])
                 logger.info("tool %s -> %s", call["name"], result)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call["id"],
-                    "content": result,
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call["id"],
+                        "content": result,
+                    }
+                )
         else:
             final = f"(no final answer within {self.config.max_tool_iterations} tool iterations)"
 
@@ -119,10 +123,14 @@ class Agent:
         agent keeps working, just without tool access.
         """
         try:
-            return self.llm.chat(messages, tools=schemas if self._tools_supported else None)
+            return self.llm.chat(
+                messages, tools=schemas if self._tools_supported else None
+            )
         except Exception as exc:
             if self._tools_supported and "tool" in str(exc).lower():
-                logger.warning("model does not support tools (%s); retrying without tools", exc)
+                logger.warning(
+                    "model does not support tools (%s); retrying without tools", exc
+                )
                 self._tools_supported = False
                 return self.llm.chat(messages)
             raise
@@ -145,7 +153,10 @@ class Agent:
             logger.warning("ensure_model failed: %s", exc)
 
     def _system_message(self, memories: list[ScoredHit]) -> dict:
-        parts = [SYSTEM_PROMPT, f"## Current environment\nFocused window: {focused_window_title()}"]
+        parts = [
+            SYSTEM_PROMPT,
+            f"## Current environment\nFocused window: {focused_window_title()}",
+        ]
         if memories:
             lines = [f"- [{m.source}] {m.content}" for m in memories]
             parts.append("## Known long-term memories\n" + "\n".join(lines))
@@ -161,7 +172,10 @@ class Agent:
 
     @staticmethod
     def _as_message(response: dict) -> dict:
-        message: dict = {"role": response["role"], "content": response["content"] or None}
+        message: dict = {
+            "role": response["role"],
+            "content": response["content"] or None,
+        }
         if response["tool_calls"]:
             message["tool_calls"] = [
                 {

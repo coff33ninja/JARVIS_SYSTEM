@@ -57,7 +57,8 @@ def test_sapi_speak_calls_speaker(monkeypatch):
 
 def test_sapi_voice_selected_by_substring(monkeypatch):
     engine, speaker = _make_engine(
-        monkeypatch, voice="zira",
+        monkeypatch,
+        voice="zira",
         speaker=_FakeSpeaker(voices=("Microsoft David", "Microsoft Zira - English")),
     )
     engine.speak("hi")
@@ -67,7 +68,7 @@ def test_sapi_voice_selected_by_substring(monkeypatch):
 def test_sapi_pitch_wraps_in_xml(monkeypatch):
     engine, speaker = _make_engine(monkeypatch, pitch=2)
     engine.speak("a & b")
-    assert "<pitch absmiddle=\"2\">a &amp; b</pitch>" in speaker.spoken[0]
+    assert '<pitch absmiddle="2">a &amp; b</pitch>' in speaker.spoken[0]
 
 
 def test_sapi_available_false_when_no_sapi(monkeypatch):
@@ -108,7 +109,9 @@ def test_piper_speak_pipes_to_binary(monkeypatch, tmp_path):
 
     monkeypatch.setattr("app.agent.tts.subprocess.run", fake_run)
     monkeypatch.setattr(winsound, "PlaySound", fake_play)
-    engine = TTSEngine(TTSConfig(backend="piper", piper_binary=str(binary), piper_model=str(model)))
+    engine = TTSEngine(
+        TTSConfig(backend="piper", piper_binary=str(binary), piper_model=str(model))
+    )
     assert engine.available is True
     engine.speak("hey jarvis")
     cmd, payload = calls["subprocess"][0]
@@ -128,7 +131,9 @@ def test_piper_run_failure_raises(monkeypatch, tmp_path):
         return types.SimpleNamespace(returncode=1, stderr=b"bad")
 
     monkeypatch.setattr("app.agent.tts.subprocess.run", fake_run)
-    engine = TTSEngine(TTSConfig(backend="piper", piper_binary=str(binary), piper_model=str(model)))
+    engine = TTSEngine(
+        TTSConfig(backend="piper", piper_binary=str(binary), piper_model=str(model))
+    )
     with pytest.raises(RuntimeError):
         engine.speak("boom")
 

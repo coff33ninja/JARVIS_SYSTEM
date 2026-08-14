@@ -70,6 +70,11 @@ def test_all_media_actions_have_keys():
     from app.control.virtual_keyboard import MEDIA_KEYS
 
     assert set(MEDIA_KEYS) == {
-        "play_pause", "next", "previous", "stop",
-        "volume_up", "volume_down", "volume_mute",
+        "play_pause",
+        "next",
+        "previous",
+        "stop",
+        "volume_up",
+        "volume_down",
+        "volume_mute",
     }

@@ -28,7 +28,9 @@ def test_registry_execute_returns_strings_never_raises():
 
 def test_remember_tool_stores_fact(store):
     reg = default_tools(store, Recaller(store))
-    result = reg.execute("remember", {"content": "User likes tea", "kind": "preference"})
+    result = reg.execute(
+        "remember", {"content": "User likes tea", "kind": "preference"}
+    )
     assert "stored fact" in result
     hits = store.keyword_search("tea")
     assert hits[0]["kind"] == "preference"
@@ -48,12 +50,17 @@ def test_recall_tool_returns_memories(store):
     reg = default_tools(store, Recaller(store))
     result = reg.execute("recall", {"query": "terminal"})
     assert "terminal" in result
-    assert reg.execute("recall", {"query": "zzzz-no-such-word"}) == "nothing found in memory"
+    assert (
+        reg.execute("recall", {"query": "zzzz-no-such-word"})
+        == "nothing found in memory"
+    )
 
 
 def test_web_search_opens_browser(monkeypatch, store):
     opened = []
-    monkeypatch.setattr("app.agent.tools.tools.webbrowser.open", lambda url: opened.append(url))
+    monkeypatch.setattr(
+        "app.agent.tools.tools.webbrowser.open", lambda url: opened.append(url)
+    )
     reg = default_tools(store, Recaller(store))
     result = reg.execute("web_search", {"query": "local LLM"})
     assert result.startswith("opened browser")
@@ -62,7 +69,9 @@ def test_web_search_opens_browser(monkeypatch, store):
 
 def test_open_path_uses_startfile(monkeypatch, store):
     started = []
-    monkeypatch.setattr("app.agent.tools.tools.os.startfile", lambda p: started.append(p))
+    monkeypatch.setattr(
+        "app.agent.tools.tools.os.startfile", lambda p: started.append(p)
+    )
     reg = default_tools(store, Recaller(store))
     result = reg.execute("open_path", {"path": "~/Documents"})
     assert result.startswith("opened")

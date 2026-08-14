@@ -24,7 +24,7 @@ class MicConfig:
     silence_threshold: float = 0.01
 
     @classmethod
-    def from_env(cls) -> "MicConfig":
+    def from_env(cls) -> MicConfig:
         cfg = cls()
         cfg.sample_rate = int(os.getenv("JARVIS_MIC_RATE", cfg.sample_rate))
         return cfg

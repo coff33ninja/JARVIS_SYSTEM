@@ -38,23 +38,22 @@ import numpy as np
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "tests"))
-from conftest import pinch_hand, point_hand  # noqa: E402
+from conftest import pinch_hand, point_hand
 
-from app.config import AppConfig  # noqa: E402
-from app.control.modes import Mode, ModeMachine  # noqa: E402
-from app.perception.hand_tracker import HandTrackingResult  # noqa: E402
-from app.perception.mapping import CursorMapper, MappingConfig  # noqa: E402
-from app.perception.pipeline import ControlPipeline  # noqa: E402
+from app.config import AppConfig
+from app.control.modes import Mode, ModeMachine
+from app.perception.hand_tracker import HandTrackingResult
+from app.perception.mapping import CursorMapper, MappingConfig
+from app.perception.pipeline import ControlPipeline
 
 FRAME = np.zeros((480, 640, 3), dtype=np.uint8)
 
 
 class _NoopTracker:
     def __init__(self):
-        self.result = HandTrackingResult(hands=[point_hand()],
-                                         handedness=["Right"])
+        self.result = HandTrackingResult(hands=[point_hand()], handedness=["Right"])
 
-    def process(self, frame):  # noqa: ARG002 - frame unused by design
+    def process(self, frame):
         return self.result
 
     def close(self):
@@ -98,7 +97,7 @@ def _pipeline(tracker) -> ControlPipeline:
 def _stats(samples: list[float]) -> dict[str, float]:
     s = sorted(samples)
     n = len(s)
-    pct = lambda p: s[min(n - 1, int(p * (n - 1)))]  # noqa: E731
+    pct = lambda p: s[min(n - 1, int(p * (n - 1)))]
     return {
         "min": s[0],
         "mean": sum(s) / n,
@@ -122,8 +121,9 @@ def bench_pipeline_overhead(frames: int, warmup: int) -> dict[str, float]:
     return _stats(times)
 
 
-def bench_paced_gesture(fps: int, hold_frames: int, tracker_ms: float,
-                        total: int = 300) -> float:
+def bench_paced_gesture(
+    fps: int, hold_frames: int, tracker_ms: float, total: int = 300
+) -> float:
     """Full loop-paced gesture->action latency (point -> pinch -> left click).
 
     Runs a real cadence loop (one step per frame slot) and times from the
@@ -147,7 +147,8 @@ def bench_paced_gesture(fps: int, hold_frames: int, tracker_ms: float,
                 gesture_onset = frame_start
             pinch_left += 1
             pipe.tracker.result = HandTrackingResult(
-                hands=[pinch_hand()], handedness=["Right"])
+                hands=[pinch_hand()], handedness=["Right"]
+            )
             pipe.step(FRAME)
         else:
             pipe.step(FRAME)
@@ -157,21 +158,30 @@ def bench_paced_gesture(fps: int, hold_frames: int, tracker_ms: float,
         elapsed = time.monotonic() - frame_start
         if elapsed < frame_period:
             time.sleep(frame_period - elapsed)
-    assert gesture_onset is not None and action_at is not None, \
-        "pinch sequence never produced a click"
+    assert (
+        gesture_onset is not None and action_at is not None
+    ), "pinch sequence never produced a click"
     return (action_at - gesture_onset) * 1000.0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--frames", type=int, default=200)
     ap.add_argument("--warmup", type=int, default=20)
-    ap.add_argument("--tracker-ms", type=float, default=25.0,
-                    help="model webcam capture + MediaPipe inference per frame")
+    ap.add_argument(
+        "--tracker-ms",
+        type=float,
+        default=25.0,
+        help="model webcam capture + MediaPipe inference per frame",
+    )
     ap.add_argument("--budget-ms", type=float, default=80.0)
-    ap.add_argument("--paced", action="store_true",
-                    help="also run the loop-paced gesture->action measurement")
+    ap.add_argument(
+        "--paced",
+        action="store_true",
+        help="also run the loop-paced gesture->action measurement",
+    )
     args = ap.parse_args()
 
     cfg = AppConfig()
@@ -185,13 +195,19 @@ def main() -> int:
     estimated_ms = hold * per_frame_ms
 
     print("Pipeline overhead (per step, tracker-agnostic):")
-    print(f"  min {overhead['min']:.3f}ms  mean {overhead['mean']:.3f}ms  "
-          f"p50 {overhead['p50']:.3f}ms  p95 {overhead['p95']:.3f}ms  "
-          f"p99 {overhead['p99']:.3f}ms  max {overhead['max']:.3f}ms")
-    print(f"\nTracker model: {args.tracker_ms:g}ms/frame (capture+inference); "
-          f"sensor cadence {capture_ms:.0f}ms")
-    print(f"Estimated gesture->action latency "
-          f"({hold} hold frames): {estimated_ms:.1f}ms")
+    print(
+        f"  min {overhead['min']:.3f}ms  mean {overhead['mean']:.3f}ms  "
+        f"p50 {overhead['p50']:.3f}ms  p95 {overhead['p95']:.3f}ms  "
+        f"p99 {overhead['p99']:.3f}ms  max {overhead['max']:.3f}ms"
+    )
+    print(
+        f"\nTracker model: {args.tracker_ms:g}ms/frame (capture+inference); "
+        f"sensor cadence {capture_ms:.0f}ms"
+    )
+    print(
+        f"Estimated gesture->action latency "
+        f"({hold} hold frames): {estimated_ms:.1f}ms"
+    )
 
     if args.paced:
         paced = bench_paced_gesture(cfg.perception.fps, hold, args.tracker_ms)
@@ -201,9 +217,11 @@ def main() -> int:
         verdict_ms = estimated_ms
 
     ok = verdict_ms < args.budget_ms
-    print(f"\nExit criterion < {args.budget_ms:g}ms: "
-          f"{'PASS' if ok else 'FAIL'} ({verdict_ms:.1f}ms, "
-          f"headroom {args.budget_ms - verdict_ms:.1f}ms)")
+    print(
+        f"\nExit criterion < {args.budget_ms:g}ms: "
+        f"{'PASS' if ok else 'FAIL'} ({verdict_ms:.1f}ms, "
+        f"headroom {args.budget_ms - verdict_ms:.1f}ms)"
+    )
     return 0 if ok else 1
 
 

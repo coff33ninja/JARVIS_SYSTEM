@@ -13,8 +13,10 @@ from app.perception.camera import Camera
 def _fake_cap(frame=None):
     cap = Mock()
     cap.isOpened.return_value = True
-    cap.read.return_value = (True, frame if frame is not None
-                             else np.zeros((480, 640, 3), dtype=np.uint8))
+    cap.read.return_value = (
+        True,
+        frame if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8),
+    )
     return cap
 
 

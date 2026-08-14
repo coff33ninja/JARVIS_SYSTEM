@@ -10,8 +10,8 @@ from .recall import (
     Episode,
     Fact,
     MemoryStore,
-    Recaller,
     RecallConfig,
+    Recaller,
     ScoredHit,
 )
 from .stt import STTConfig, STTEngine
@@ -33,11 +33,11 @@ __all__ = [
     "MemoryStore",
     "MicConfig",
     "MicInput",
-    "Recaller",
     "RecallConfig",
-    "ScoredHit",
+    "Recaller",
     "STTConfig",
     "STTEngine",
+    "ScoredHit",
     "TTSConfig",
     "TTSEngine",
     "Tool",

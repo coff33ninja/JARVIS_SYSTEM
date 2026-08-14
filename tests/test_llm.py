@@ -151,11 +151,16 @@ class FakeURLopener:
         return FakeResponse(json.dumps(handler).encode())
 
 
-def _make_auto_pull_client(monkeypatch, model="llama3.2", ids=("other",),
-                           auto_pull=True, models_ok=True):
-    client = LLMClient(LLMConfig(
-        base_url="http://localhost:9/v1", model=model, auto_pull=auto_pull,
-    ))
+def _make_auto_pull_client(
+    monkeypatch, model="llama3.2", ids=("other",), auto_pull=True, models_ok=True
+):
+    client = LLMClient(
+        LLMConfig(
+            base_url="http://localhost:9/v1",
+            model=model,
+            auto_pull=auto_pull,
+        )
+    )
     fake = FakeClient(models_ok=models_ok, model_ids=ids)
     client._build_client = lambda: fake
     return client, fake
@@ -170,10 +175,12 @@ def test_ensure_model_true_when_installed(monkeypatch):
 
 
 def test_ensure_model_pulls_when_missing(monkeypatch):
-    opener = FakeURLopener([
-        {"models": [{"name": "other"}]},      # GET /api/tags
-        {"status": "success"},                 # POST /api/pull
-    ])
+    opener = FakeURLopener(
+        [
+            {"models": [{"name": "other"}]},  # GET /api/tags
+            {"status": "success"},  # POST /api/pull
+        ]
+    )
     monkeypatch.setattr(urllib.request, "urlopen", opener)
     client, _ = _make_auto_pull_client(monkeypatch)
     assert client.ensure_model() is True
@@ -187,8 +194,9 @@ def test_ensure_model_pulls_when_missing(monkeypatch):
 def test_ensure_model_ignores_tag_suffix(monkeypatch):
     opener = FakeURLopener([])
     monkeypatch.setattr(urllib.request, "urlopen", opener)
-    client, _ = _make_auto_pull_client(monkeypatch, model="llama3.2:latest",
-                                       ids=("llama3.2",))
+    client, _ = _make_auto_pull_client(
+        monkeypatch, model="llama3.2:latest", ids=("llama3.2",)
+    )
     assert client.ensure_model() is True
     assert opener.calls == []
 
@@ -212,20 +220,24 @@ def test_ensure_model_false_when_endpoint_down(monkeypatch):
 
 
 def test_ensure_model_pull_failure(monkeypatch):
-    opener = FakeURLopener([
-        {"models": []},
-        {"status": "error", "error": "blob unknown"},
-    ])
+    opener = FakeURLopener(
+        [
+            {"models": []},
+            {"status": "error", "error": "blob unknown"},
+        ]
+    )
     monkeypatch.setattr(urllib.request, "urlopen", opener)
     client, _ = _make_auto_pull_client(monkeypatch)
     assert client.ensure_model() is False
 
 
 def test_ensure_model_pull_network_error(monkeypatch):
-    opener = FakeURLopener([
-        {"models": []},
-        urllib.error.URLError("timeout"),
-    ])
+    opener = FakeURLopener(
+        [
+            {"models": []},
+            urllib.error.URLError("timeout"),
+        ]
+    )
     monkeypatch.setattr(urllib.request, "urlopen", opener)
     client, _ = _make_auto_pull_client(monkeypatch)
     assert client.ensure_model() is False

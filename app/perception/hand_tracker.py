@@ -44,15 +44,15 @@ class HandTrackingResult:
         return bool(self.hands)
 
 
-def download_model(url: str = DEFAULT_MODEL_URL,
-                   dest: str | Path = DEFAULT_MODEL_PATH) -> bool:
+def download_model(
+    url: str = DEFAULT_MODEL_URL, dest: str | Path = DEFAULT_MODEL_PATH
+) -> bool:
     """Stream the task model to ``dest``. True on success (no raise)."""
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
     try:
-        with urllib.request.urlopen(url, timeout=120) as resp, \
-                open(tmp, "wb") as out:
+        with urllib.request.urlopen(url, timeout=120) as resp, open(tmp, "wb") as out:
             while True:
                 chunk = resp.read(1 << 16)
                 if not chunk:
@@ -122,7 +122,8 @@ class HandLandmarkerTracker:
             return None
         try:
             base = mp_python.BaseOptions(
-                model_asset_path=str(self.model_path.resolve()))
+                model_asset_path=str(self.model_path.resolve())
+            )
             options = vision.HandLandmarkerOptions(
                 base_options=base,
                 running_mode=vision.RunningMode.VIDEO,
@@ -160,8 +161,9 @@ class HandLandmarkerTracker:
         hands: list[list[tuple[float, float, float]]] = []
         for lmks in result.hand_landmarks or []:
             hands.append([(lm.x, lm.y, lm.z) for lm in lmks])
-        handedness = [c.category_name
-                      for hand in (result.handedness or []) for c in hand]
+        handedness = [
+            c.category_name for hand in (result.handedness or []) for c in hand
+        ]
         return HandTrackingResult(hands=hands or None, handedness=handedness)
 
     def close(self) -> None:

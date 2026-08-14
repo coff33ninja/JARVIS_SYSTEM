@@ -21,11 +21,11 @@ class Mode(Enum):
 
 # Triggers the system understands today. Voice/hotkey triggers wire into the
 # same table in Phase 2; custom gestures can be added the same way.
-WAKE = "wake"              # any tracked hand in Idle mode
-HOTKEY = "hotkey"          # keyboard override
-VOICE = "voice"            # "Jarvis, transfer mode"
-TRANSFER_GESTURE = "transfer_gesture"      # Phase 2 two-hand spread
-PRESENT_GESTURE = "present_gesture"        # Phase 2 presentation mode gesture
+WAKE = "wake"  # any tracked hand in Idle mode
+HOTKEY = "hotkey"  # keyboard override
+VOICE = "voice"  # "Jarvis, transfer mode"
+TRANSFER_GESTURE = "transfer_gesture"  # Phase 2 two-hand spread
+PRESENT_GESTURE = "present_gesture"  # Phase 2 presentation mode gesture
 
 _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.IDLE, WAKE): Mode.CONTROL,
@@ -43,8 +43,16 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
 # (index-trace attention) gated separately from mode posture — it acts in any
 # mode, so it does not appear in the per-mode _ACTIVE table.
 GESTURES = {
-    "point", "pinch", "two_finger_pinch", "fist",
-    "v_sign", "open_palm", "thumbs_up", "thumbs_down", "circle", "none",
+    "point",
+    "pinch",
+    "two_finger_pinch",
+    "fist",
+    "v_sign",
+    "open_palm",
+    "thumbs_up",
+    "thumbs_down",
+    "circle",
+    "none",
 }
 
 # Which gestures act per mode. "none" is always inert.

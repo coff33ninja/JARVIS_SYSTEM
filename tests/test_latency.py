@@ -42,6 +42,5 @@ def test_paced_gesture_to_action_under_exit_budget():
     a second while exercising the full path: debounce, classify, dispatch.
     Observed ~15ms; anything >= 80ms is a real regression.
     """
-    latency = bl.bench_paced_gesture(fps=120, hold_frames=2,
-                                     tracker_ms=5.0, total=30)
+    latency = bl.bench_paced_gesture(fps=120, hold_frames=2, tracker_ms=5.0, total=30)
     assert latency < 80.0, f"gesture->action latency {latency:.1f}ms >= 80ms"

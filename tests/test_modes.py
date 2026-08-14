@@ -69,8 +69,11 @@ def test_idle_allows_nothing():
 @pytest.mark.parametrize(
     "mode,allowed,denied",
     [
-        (Mode.CONTROL, ["point", "pinch", "two_finger_pinch", "fist", "v_sign"],
-         ["open_palm"]),
+        (
+            Mode.CONTROL,
+            ["point", "pinch", "two_finger_pinch", "fist", "v_sign"],
+            ["open_palm"],
+        ),
         (Mode.CHAT, ["open_palm", "point"], ["fist", "pinch"]),
         (Mode.TRANSFER, ["open_palm"], ["point", "fist"]),
         (Mode.PRESENTATION, ["point", "v_sign"], ["pinch", "fist"]),
@@ -90,8 +93,18 @@ def test_none_never_allowed():
 
 
 def test_all_gestures_known():
-    assert {"point", "pinch", "two_finger_pinch", "fist", "v_sign",
-            "open_palm", "thumbs_up", "thumbs_down", "circle", "none"} == GESTURES
+    assert {
+        "point",
+        "pinch",
+        "two_finger_pinch",
+        "fist",
+        "v_sign",
+        "open_palm",
+        "thumbs_up",
+        "thumbs_down",
+        "circle",
+        "none",
+    } == GESTURES
 
 
 def test_known_gestures_subset_of_mode_table():

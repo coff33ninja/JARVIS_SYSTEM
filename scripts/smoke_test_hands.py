@@ -28,10 +28,18 @@ from app.perception.hand_tracker import HandLandmarkerTracker
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="JARVIS hand-tracking smoke test")
-    p.add_argument("--index", type=int, default=None,
-                   help="camera index (default: from config, usually 0)")
-    p.add_argument("--seconds", type=int, default=0,
-                   help="auto-exit after N seconds (0 = run until ESC)")
+    p.add_argument(
+        "--index",
+        type=int,
+        default=None,
+        help="camera index (default: from config, usually 0)",
+    )
+    p.add_argument(
+        "--seconds",
+        type=int,
+        default=0,
+        help="auto-exit after N seconds (0 = run until ESC)",
+    )
     return p.parse_args(argv)
 
 
@@ -44,10 +52,13 @@ def main(argv: list[str] | None = None) -> int:
     tracker = HandLandmarkerTracker(
         num_hands=cfg.perception.max_hands,
         min_hand_confidence=cfg.perception.min_hand_confidence,
-        min_tracking_confidence=cfg.perception.min_tracking_confidence)
+        min_tracking_confidence=cfg.perception.min_tracking_confidence,
+    )
     if not tracker.available:
-        print("ERROR: hand tracker unavailable (model missing or mediapipe "
-              "failed). See docs/08_ASSETS.md.")
+        print(
+            "ERROR: hand tracker unavailable (model missing or mediapipe "
+            "failed). See docs/08_ASSETS.md."
+        )
         return 1
     if not cam.open():
         print(f"ERROR: camera {idx} could not be opened. Try --index 1.")
@@ -93,8 +104,15 @@ def _draw_landmarks(frame, lmks) -> None:
 
 def _draw_hud(frame, detected: bool) -> None:
     color = (0, 255, 0) if detected else (0, 0, 255)
-    cv2.putText(frame, "HAND TRACKED" if detected else "NO HAND",
-                (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+    cv2.putText(
+        frame,
+        "HAND TRACKED" if detected else "NO HAND",
+        (12, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.9,
+        color,
+        2,
+    )
 
 
 if __name__ == "__main__":

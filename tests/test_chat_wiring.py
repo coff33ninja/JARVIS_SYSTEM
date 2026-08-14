@@ -11,14 +11,15 @@ mouse/HUD from test_pipeline (09_TESTING integration strategy).
 
 from __future__ import annotations
 
+from conftest import open_hand, pinch_hand, point_hand
+from test_pipeline import FRAME, FakeCamera, FakeHUD, FakeMouse, FakeTracker
+from test_voice import LOUD, make_loop
+
 from app.config import AppConfig
 from app.control.mode_voice import handle_mode_command
 from app.control.modes import Mode, ModeMachine
 from app.perception.mapping import CursorMapper, MappingConfig
 from app.perception.pipeline import ControlPipeline
-from conftest import open_hand, pinch_hand, point_hand
-from test_pipeline import FRAME, FakeCamera, FakeHUD, FakeMouse, FakeTracker
-from test_voice import LOUD, make_loop
 
 
 def _pipeline_with(modes: ModeMachine) -> ControlPipeline:
@@ -42,8 +43,7 @@ def _hand(result):
 def test_full_idle_to_chat_voice_trigger_flow(store):
     modes = ModeMachine(Mode.IDLE)
     pipe = _pipeline_with(modes)
-    loop, agent = make_loop(
-        store, LOUD, ["jarvis chat mode", "jarvis control mode"])
+    loop, agent = make_loop(store, LOUD, ["jarvis chat mode", "jarvis control mode"])
     loop.on_command = lambda cmd: handle_mode_command(cmd, modes)
 
     # 1) Idle wakes to Control on any tracked hand.
@@ -81,15 +81,18 @@ def test_full_idle_to_chat_voice_trigger_flow(store):
 def test_non_mode_voice_command_does_not_change_mode(store):
     modes = ModeMachine(Mode.CONTROL)
     pipe = _pipeline_with(modes)
-    loop, agent = make_loop(store, LOUD, ["jarvis open settings"],
-                            llm_responses=[{"role": "assistant",
-                                            "content": "done", "tool_calls": []}])
+    loop, agent = make_loop(
+        store,
+        LOUD,
+        ["jarvis open settings"],
+        llm_responses=[{"role": "assistant", "content": "done", "tool_calls": []}],
+    )
     loop.on_command = lambda cmd: handle_mode_command(cmd, modes)
 
     result = loop.run_once()
     assert result["command"] == "open settings"
     assert modes.mode is Mode.CONTROL  # untouched
-    assert len(agent.llm.calls) == 1   # agent handled it instead
+    assert len(agent.llm.calls) == 1  # agent handled it instead
 
     # Pipeline still acts as Control afterwards.
     pipe.tracker.result = _hand(point_hand())

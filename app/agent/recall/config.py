@@ -40,7 +40,7 @@ class RecallConfig:
     min_score: float = 0.0
 
     @classmethod
-    def from_env(cls) -> "RecallConfig":
+    def from_env(cls) -> RecallConfig:
         """Build config from ``JARVIS_*`` env vars, falling back to defaults."""
         cfg = cls()
         cfg.db_path = os.getenv("JARVIS_MEMORY_DB", cfg.db_path)

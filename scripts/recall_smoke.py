@@ -17,8 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.agent.context import build_context  # noqa: E402
-from app.agent.recall import (  # noqa: E402
+from app.agent.context import build_context
+from app.agent.recall import (
     Embedder,
     Episode,
     Fact,
@@ -30,7 +30,9 @@ from app.agent.recall import (  # noqa: E402
 DEMO_FACTS = [
     Fact("User prefers the terminal over GUI file managers", tags=("preference",)),
     Fact("Default file transfer method is LocalSend over the LAN", tags=("file",)),
-    Fact("Pinch clicks, a fist drags, and a throw gesture sends files", tags=("gesture",)),
+    Fact(
+        "Pinch clicks, a fist drags, and a throw gesture sends files", tags=("gesture",)
+    ),
     Fact("Ollama runs locally at localhost:11434", tags=("llm",)),
 ]
 
@@ -45,8 +47,12 @@ QUERIES = ["terminal", "file transfer", "throw gesture"]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", default=":memory:", help="SQLite path (default: in-memory)")
-    parser.add_argument("--no-embed", action="store_true", help="skip the Ollama index attempt")
+    parser.add_argument(
+        "--db", default=":memory:", help="SQLite path (default: in-memory)"
+    )
+    parser.add_argument(
+        "--no-embed", action="store_true", help="skip the Ollama index attempt"
+    )
     args = parser.parse_args()
 
     with MemoryStore(args.db) as store:
@@ -61,8 +67,11 @@ def main() -> int:
         if not args.no_embed:
             try:
                 indexed = recaller.index()
-                print(f"[semantic] indexed {indexed} row(s)"
-                      if indexed else "[semantic] nothing indexed (Ollama offline?)")
+                print(
+                    f"[semantic] indexed {indexed} row(s)"
+                    if indexed
+                    else "[semantic] nothing indexed (Ollama offline?)"
+                )
             except Exception as exc:
                 print(f"[semantic] skipped: {exc}")
 
@@ -71,13 +80,18 @@ def main() -> int:
             hits = recaller.remember(query)
             print(f"[recall] {query!r} -> {len(hits)} hit(s)")
             for hit in hits[:3]:
-                print(f"    {hit.score:.2f}  {hit.source:8s} [{hit.table}] {hit.content[:70]}")
+                print(
+                    f"    {hit.score:.2f}  {hit.source:8s} [{hit.table}] {hit.content[:70]}"
+                )
             if not hits:
                 ok = False
 
         context = build_context(store, recaller, QUERIES[0], session_id="smoke")
-        print("[context] assembled prompt block of",
-              len(context.to_prompt().splitlines()), "lines")
+        print(
+            "[context] assembled prompt block of",
+            len(context.to_prompt().splitlines()),
+            "lines",
+        )
 
         print("[stats]", store.stats())
 

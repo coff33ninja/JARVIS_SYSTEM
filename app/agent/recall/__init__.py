@@ -28,7 +28,7 @@ __all__ = [
     "Episode",
     "Fact",
     "MemoryStore",
-    "Recaller",
     "RecallConfig",
+    "Recaller",
     "ScoredHit",
 ]

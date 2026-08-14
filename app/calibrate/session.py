@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from ..config import AppConfig, CONFIG_FILE
+from ..config import CONFIG_FILE, AppConfig
 from ..perception.calibration import fit_homography, is_valid_homography
 
 CORNER_LABELS = ("top_left", "top_right", "bottom_right", "bottom_left")
@@ -90,8 +90,10 @@ class CalibrationSession:
         h = fit_homography(src, dst)  # type: ignore[arg-type]
         if h is None:
             self.cancel()
-            self.error = ("degenerate corners — pinch at 4 distinct screen "
-                          "corners and try again")
+            self.error = (
+                "degenerate corners — pinch at 4 distinct screen "
+                "corners and try again"
+            )
             return False
         self.homography = h
         self.done = True
@@ -111,11 +113,15 @@ class CalibrationSession:
             "active": not self.done,
             "captured": self.captured_count,
             "total": len(self.corners),
-            "corner": None if corner is None else {
-                "index": corner.index,
-                "label": corner.label,
-                "pixel": list(corner.pixel),
-            },
+            "corner": (
+                None
+                if corner is None
+                else {
+                    "index": corner.index,
+                    "label": corner.label,
+                    "pixel": list(corner.pixel),
+                }
+            ),
             "homography": self.homography,
             "valid": is_valid_homography(self.homography),
             "error": self.error,
@@ -125,8 +131,12 @@ class CalibrationSession:
 class CalibrationController:
     """Session + live pipeline + config persistence glue for the HTTP API."""
 
-    def __init__(self, config: AppConfig, pipeline: Optional[object] = None,
-                 save_path: Optional[Path | str] = None):
+    def __init__(
+        self,
+        config: AppConfig,
+        pipeline: object | None = None,
+        save_path: Path | str | None = None,
+    ):
         self.config = config
         self.pipeline = pipeline
         self._save_path = Path(save_path) if save_path else CONFIG_FILE
@@ -163,20 +173,30 @@ class CalibrationController:
         """Record a corner point (from a pinch or an explicit request)."""
         if self.session is None:
             return {"error": "no active calibration session — start one first"}
-        corner, finished = self.session.capture(nx, ny)
+        _corner, finished = self.session.capture(nx, ny)
         if finished and self.session.homography is not None:
             self._apply_homography(self.session.homography)
             self._disarm()
         return self.status()
 
     def status(self) -> dict[str, Any]:
-        sess = (self.session.status() if self.session is not None else {
-            "active": False, "captured": 0, "total": len(CORNER_LABELS),
-            "corner": None, "homography": None, "valid": False, "error": None,
-        })
+        sess = (
+            self.session.status()
+            if self.session is not None
+            else {
+                "active": False,
+                "captured": 0,
+                "total": len(CORNER_LABELS),
+                "corner": None,
+                "homography": None,
+                "valid": False,
+                "error": None,
+            }
+        )
         sess["armed"] = self.armed
         sess["saved_calibration_valid"] = is_valid_homography(
-            self.config.control.calibration)
+            self.config.control.calibration
+        )
         return sess
 
     # ------------------------------------------------------------------ #

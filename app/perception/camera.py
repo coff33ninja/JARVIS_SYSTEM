@@ -70,7 +70,7 @@ class Camera:
     def close(self) -> None:
         self.release()
 
-    def __enter__(self) -> "Camera":
+    def __enter__(self) -> Camera:
         self.open()
         return self
 

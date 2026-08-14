@@ -21,16 +21,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import win32com.client  # noqa: E402,F401  (imported for SAPI side effects)
+import win32com.client
 
-from app.agent.agent import Agent  # noqa: E402
+from app.agent.agent import Agent
 from app.agent.llm import LLMClient, LLMConfig
 from app.agent.recall.retriever import Recaller
 from app.agent.recall.store import MemoryStore
 from app.agent.stt import STTConfig, STTEngine
 from app.agent.tools.tools import default_tools
 from app.agent.tts import TTSConfig, TTSEngine
-from app.agent.voice import VoiceLoop, VoiceConfig
+from app.agent.voice import VoiceConfig, VoiceLoop
 
 DEFAULT_PHRASE = "jarvis open the project folder"
 
@@ -48,27 +48,47 @@ def synthesize(phrase: str, path: str) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--phrase", default=DEFAULT_PHRASE,
-                        help="phrase to synthesize and run (default: %(default)s)")
-    parser.add_argument("--stt-model", default="tiny",
-                        help="faster-whisper size for the smoke (default: %(default)s)")
-    parser.add_argument("--llm-model", default=None,
-                        help="LLM model (default: JARVIS_LLM_MODEL or llama3.2)")
-    parser.add_argument("--llm-timeout", type=float, default=120.0,
-                        help="LLM request timeout in seconds (default: %(default)s)")
-    parser.add_argument("--no-open", action="store_true",
-                        help="do not let the agent actually open the folder")
+    parser.add_argument(
+        "--phrase",
+        default=DEFAULT_PHRASE,
+        help="phrase to synthesize and run (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--stt-model",
+        default="tiny",
+        help="faster-whisper size for the smoke (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--llm-model",
+        default=None,
+        help="LLM model (default: JARVIS_LLM_MODEL or llama3.2)",
+    )
+    parser.add_argument(
+        "--llm-timeout",
+        type=float,
+        default=120.0,
+        help="LLM request timeout in seconds (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="do not let the agent actually open the folder",
+    )
     args = parser.parse_args()
 
-    llm = LLMClient(LLMConfig(model=args.llm_model or LLMConfig().model,
-                              timeout_s=args.llm_timeout))
+    llm = LLMClient(
+        LLMConfig(model=args.llm_model or LLMConfig().model, timeout_s=args.llm_timeout)
+    )
     print(f"[1/5] LLM available: {llm.available}")
     print(f"      ensure_model({llm.config.model}) -> {llm.ensure_model()}")
 
     stt = STTEngine(STTConfig(model_size=args.stt_model))
     if not stt.available:
-        print("STT model could not be loaded — run again once the download "
-              "finishes, or check network.", file=sys.stderr)
+        print(
+            "STT model could not be loaded — run again once the download "
+            "finishes, or check network.",
+            file=sys.stderr,
+        )
         return 1
 
     tts = TTSEngine(TTSConfig())
@@ -115,8 +135,10 @@ def main() -> int:
     print("-" * 50)
     print(f"voice round-trip (STT + agent + TTS): {total:.2f}s")
     print(f"  STT {stt_s:.2f}s | agent {agent_s:.2f}s | TTS {tts_s:.2f}s")
-    print("exit criteria: '< 2 s wake -> action'",
-          "PASS" if stt_s + agent_s < 2.0 else "OVER BUDGET")
+    print(
+        "exit criteria: '< 2 s wake -> action'",
+        "PASS" if stt_s + agent_s < 2.0 else "OVER BUDGET",
+    )
     return 0
 
 

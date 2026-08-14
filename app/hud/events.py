@@ -34,8 +34,14 @@ class ReticleEvent:
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "reticle", "x": self.x, "y": self.y,
-                "monitor": self.monitor, "zone": self.zone, "ts": self.ts}
+        return {
+            "type": "reticle",
+            "x": self.x,
+            "y": self.y,
+            "monitor": self.monitor,
+            "zone": self.zone,
+            "ts": self.ts,
+        }
 
 
 @dataclass
@@ -49,9 +55,14 @@ class StatusEvent:
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "status", "mode": self.mode, "fps": self.fps,
-                "detected": self.detected, "gesture": self.gesture,
-                "ts": self.ts}
+        return {
+            "type": "status",
+            "mode": self.mode,
+            "fps": self.fps,
+            "detected": self.detected,
+            "gesture": self.gesture,
+            "ts": self.ts,
+        }
 
 
 @dataclass
@@ -63,8 +74,12 @@ class MonitorsEvent:
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "monitors", "monitors": self.monitors,
-                "active_monitor": self.active_monitor, "ts": self.ts}
+        return {
+            "type": "monitors",
+            "monitors": self.monitors,
+            "active_monitor": self.active_monitor,
+            "ts": self.ts,
+        }
 
 
 @dataclass
@@ -85,11 +100,18 @@ class MenuEvent:
     ts: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": "menu", "state": self.state, "category": self.category,
-                "item": self.item, "categories": self.categories, "ts": self.ts}
+        return {
+            "type": "menu",
+            "state": self.state,
+            "category": self.category,
+            "item": self.item,
+            "categories": self.categories,
+            "ts": self.ts,
+        }
 
 
-def encode(event: (SkeletonEvent | ReticleEvent | StatusEvent
-                   | MonitorsEvent | MenuEvent)) -> dict[str, Any]:
+def encode(
+    event: SkeletonEvent | ReticleEvent | StatusEvent | MonitorsEvent | MenuEvent,
+) -> dict[str, Any]:
     """Normalise any HUD event to its wire dict (mirrors asdict for safety)."""
     return event.to_dict()

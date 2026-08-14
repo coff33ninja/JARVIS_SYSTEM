@@ -14,7 +14,9 @@ class FakeSD:
 
     def rec(self, frames, samplerate, channels, dtype, device):
         self.records.append((frames, samplerate, channels, dtype, device))
-        block = self.blocks.pop(0) if self.blocks else np.zeros(frames, dtype=np.float32)
+        block = (
+            self.blocks.pop(0) if self.blocks else np.zeros(frames, dtype=np.float32)
+        )
         return block.astype(dtype)
 
     def wait(self):
@@ -37,8 +39,8 @@ def test_rms_of_loud_signal():
 
 
 def test_record_until_silence_stops_after_quiet_tail(monkeypatch):
-    loud = np.full(4000, 0.5, dtype=np.float32)      # 0.25 s speech
-    quiet = np.zeros(4000, dtype=np.float32)          # 0.25 s silence
+    loud = np.full(4000, 0.5, dtype=np.float32)  # 0.25 s speech
+    quiet = np.zeros(4000, dtype=np.float32)  # 0.25 s silence
     mic, fake = _mic_with(monkeypatch, [loud, quiet, quiet])  # 2 quiet = 0.5 s >= 0.5 s
     out = mic.record_until_silence()
     assert len(fake.records) == 3  # loud + 2 quiet, stops once timeout reached

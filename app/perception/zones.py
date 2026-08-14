@@ -53,8 +53,9 @@ def monitor_at(x: int, y: int, monitors: list[ScreenRect]) -> int:
     return -1
 
 
-def zone_for(x: int, y: int, monitors: list[ScreenRect],
-             screen: ScreenRect | None = None) -> str:
+def zone_for(
+    x: int, y: int, monitors: list[ScreenRect], screen: ScreenRect | None = None
+) -> str:
     """Named zone for a screen point.
 
     Returns ``monitor_{i}`` when the point is inside a monitor; otherwise a
@@ -66,7 +67,7 @@ def zone_for(x: int, y: int, monitors: list[ScreenRect],
         return f"monitor_{idx}"
     if screen is None:
         return "outside"
-    sx, sy, sw, sh = screen
+    sx, _sy, sw, sh = screen
     if sw <= 0 or sh <= 0:
         return "outside"
     near_left = x - sx < EDGE_MARGIN_PX

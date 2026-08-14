@@ -45,7 +45,7 @@ class ControlConfig:
     # Cursor gain: how many screen pixels per normalized hand unit.
     gain_x: float = 3.2
     gain_y: float = 3.2
-    invert_x: bool = True   # selfie mirror: moving right appears left in frame
+    invert_x: bool = True  # selfie mirror: moving right appears left in frame
     invert_y: bool = False
 
     # 1-Euro filter parameters (04_GESTURE_VOCABULARY recommended defaults).
@@ -54,15 +54,15 @@ class ControlConfig:
     d_cutoff: float = 1.0
 
     # Gesture thresholds (normalized by hand size, see geometry.py).
-    pinch_threshold: float = 0.06       # thumb-index tip distance -> click
+    pinch_threshold: float = 0.06  # thumb-index tip distance -> click
     two_finger_pinch_threshold: float = 0.06  # thumb-middle tip -> right click
-    scroll_threshold: float = 0.02      # V-sign vertical delta -> scroll tick
-    scroll_hold_ms: int = 150           # min time between scroll ticks
+    scroll_threshold: float = 0.02  # V-sign vertical delta -> scroll tick
+    scroll_hold_ms: int = 150  # min time between scroll ticks
 
     # Swipe: a fast lateral sweep of the pointing hand. Motion must accumulate
     # in one direction past swipe_threshold_px; a direction change resets it.
     swipe_threshold_px: float = 250.0
-    swipe_cooldown_ms: int = 600        # min time between swipe actions
+    swipe_cooldown_ms: int = 600  # min time between swipe actions
 
     # Debounce: consecutive frames a gesture must hold before it fires.
     hold_frames: int = 2
@@ -77,7 +77,7 @@ class ControlConfig:
     # by the same hold_frames debounce). preferred_hand drives the cursor when
     # both hands are present (MediaPipe handedness label, e.g. "Right").
     preferred_hand: str = "Right"
-    two_hand_spread_threshold: float = 0.4   # normalized palm-center distance
+    two_hand_spread_threshold: float = 0.4  # normalized palm-center distance
 
     # Two-hand pinch-apart (vocabulary "two-hand pinch apart"): while both
     # hands pinch, moving the palms apart zooms in (Ctrl++) and together zooms
@@ -88,12 +88,12 @@ class ControlConfig:
     # Circle / index-trace "Jarvis" attention: the pointing index draws a
     # closed loop (see geometry.is_circle_trace). Fires an "attention" action
     # in any mode; cooldown prevents rapid re-triggering.
-    circle_min_samples: int = 8        # trajectory samples needed to classify
-    circle_max_samples: int = 30       # recent-trace window kept for detection
-    circle_min_sweep: float = 4.5      # min angular sweep (rad) around centroid
-    circle_max_aspect: float = 0.6     # min bbox aspect ratio (line = ~0)
-    circle_endpoint_tol: float = 0.4   # start/end closure tol (fraction of diag)
-    circle_cooldown_ms: int = 1500     # min time between attention triggers
+    circle_min_samples: int = 8  # trajectory samples needed to classify
+    circle_max_samples: int = 30  # recent-trace window kept for detection
+    circle_min_sweep: float = 4.5  # min angular sweep (rad) around centroid
+    circle_max_aspect: float = 0.6  # min bbox aspect ratio (line = ~0)
+    circle_endpoint_tol: float = 0.4  # start/end closure tol (fraction of diag)
+    circle_cooldown_ms: int = 1500  # min time between attention triggers
 
     # PyAutoGUI corner fail-safe. Off for gesture control: corners are
     # legitimate cursor targets and the loop has its own abort (ESC/q).
@@ -164,7 +164,7 @@ class AppConfig:
     # ------------------------------------------------------------------ #
 
     @classmethod
-    def load(cls, path: str | Path = CONFIG_FILE) -> "AppConfig":
+    def load(cls, path: str | Path = CONFIG_FILE) -> AppConfig:
         """Load from YAML. Missing file -> defaults (never raises).
 
         Unknown keys are ignored; invalid values fall back to the field
@@ -191,14 +191,13 @@ class AppConfig:
     def save(self, path: str | Path = CONFIG_FILE) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(yaml.safe_dump(asdict(self), sort_keys=False),
-                        encoding="utf-8")
+        path.write_text(yaml.safe_dump(asdict(self), sort_keys=False), encoding="utf-8")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def defaults(cls) -> "AppConfig":
+    def defaults(cls) -> AppConfig:
         return cls()
 
 
@@ -226,8 +225,12 @@ def _apply_section(target: Any, raw: dict[str, Any]) -> None:
         try:
             value = _coerce(f.type, raw[f.name])
         except (TypeError, ValueError):
-            logger.warning("config value %s=%r invalid; using default %r",
-                           f.name, raw[f.name], getattr(target, f.name))
+            logger.warning(
+                "config value %s=%r invalid; using default %r",
+                f.name,
+                raw[f.name],
+                getattr(target, f.name),
+            )
             continue
         setattr(target, f.name, value)
 

@@ -54,7 +54,7 @@ def test_transcribe_file_passes_path(monkeypatch):
 
 
 def test_available_caches_model(monkeypatch):
-    engine, fake = _make_engine(monkeypatch, ["x"])
+    engine, _fake = _make_engine(monkeypatch, ["x"])
     assert engine.available is True
     assert engine.available is True
     assert engine._model is not None

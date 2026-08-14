@@ -30,7 +30,8 @@ class AgentContext:
             blocks.append("## Recent conversation\n" + "\n".join(lines))
         if self.memories:
             lines = [
-                f"- [{m.source}] {m.content} (score {m.score:.2f})" for m in self.memories
+                f"- [{m.source}] {m.content} (score {m.score:.2f})"
+                for m in self.memories
             ]
             blocks.append("## Relevant long-term memories\n" + "\n".join(lines))
         return "\n\n".join(blocks)

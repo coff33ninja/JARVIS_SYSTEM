@@ -20,15 +20,15 @@ BACKENDS = ("sapi", "piper")
 
 @dataclass
 class TTSConfig:
-    backend: str = "sapi"              # sapi | piper
-    voice: str = "en_US-amy-medium"    # piper voice id, or SAPI voice substring
-    piper_binary: str = ""             # path to piper.exe
-    piper_model: str = ""              # path to voice .onnx
-    rate: int = 0                      # SAPI rate (-10..10), 0 = default
-    pitch: int = 0                     # SAPI pitch semitones; 0 = off
+    backend: str = "sapi"  # sapi | piper
+    voice: str = "en_US-amy-medium"  # piper voice id, or SAPI voice substring
+    piper_binary: str = ""  # path to piper.exe
+    piper_model: str = ""  # path to voice .onnx
+    rate: int = 0  # SAPI rate (-10..10), 0 = default
+    pitch: int = 0  # SAPI pitch semitones; 0 = off
 
     @classmethod
-    def from_env(cls) -> "TTSConfig":
+    def from_env(cls) -> TTSConfig:
         cfg = cls()
         cfg.backend = os.getenv("JARVIS_TTS_BACKEND", cfg.backend)
         cfg.voice = os.getenv("JARVIS_TTS_VOICE", cfg.voice)
@@ -53,7 +53,9 @@ class TTSEngine:
             ok = ok and os.path.isfile(self.config.piper_binary)
             ok = ok and os.path.isfile(self.config.piper_model)
             if not ok:
-                logger.warning("Piper TTS unavailable: set JARVIS_PIPER_BINARY and JARVIS_PIPER_MODEL")
+                logger.warning(
+                    "Piper TTS unavailable: set JARVIS_PIPER_BINARY and JARVIS_PIPER_MODEL"
+                )
             return ok
         try:
             self._speaker()
@@ -98,7 +100,9 @@ class TTSEngine:
     def _speak_sapi(self, text: str) -> None:
         speaker = self._speaker()
         if self.config.pitch:
-            payload = f'<pitch absmiddle="{int(self.config.pitch)}">{escape(text)}</pitch>'
+            payload = (
+                f'<pitch absmiddle="{int(self.config.pitch)}">{escape(text)}</pitch>'
+            )
         else:
             payload = text
         speaker.Speak(payload)
@@ -110,13 +114,21 @@ class TTSEngine:
             tmp_path = tmp.name
         try:
             proc = subprocess.run(
-                [self.config.piper_binary, "--model", self.config.piper_model, "--output_file", tmp_path],
+                [
+                    self.config.piper_binary,
+                    "--model",
+                    self.config.piper_model,
+                    "--output_file",
+                    tmp_path,
+                ],
                 input=text.encode("utf-8"),
                 capture_output=True,
                 timeout=30,
             )
             if proc.returncode != 0:
-                raise RuntimeError(f"piper failed ({proc.returncode}): {proc.stderr.decode(errors='replace')}")
+                raise RuntimeError(
+                    f"piper failed ({proc.returncode}): {proc.stderr.decode(errors='replace')}"
+                )
             winsound.PlaySound(tmp_path, winsound.SND_FILENAME)
         finally:
             try:

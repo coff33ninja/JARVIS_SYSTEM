@@ -74,8 +74,11 @@ class OneEuroFilter:
 
     def __call__(self, value: float, t: float | None = None) -> float:
         if t is None:
-            t = self._t_last + 1.0 / self.freq if self._t_last is not None \
+            t = (
+                self._t_last + 1.0 / self.freq
+                if self._t_last is not None
                 else time.monotonic()
+            )
         dt = (t - self._t_last) if self._t_last is not None else (1.0 / self.freq)
         if dt <= 0:
             dt = 1.0 / self.freq

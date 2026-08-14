@@ -5,12 +5,23 @@ from __future__ import annotations
 import math
 
 import pytest
+from conftest import (
+    fist,
+    make_hand,
+    open_hand,
+    pinch_hand,
+    point_hand,
+    thumb_down_hand,
+    thumb_up_hand,
+    two_pinch_hand,
+    v_sign,
+)
 
 from app.perception.geometry import (
-    GeometryConfig,
     INDEX_TIP,
     MIDDLE_TIP,
     THUMB_TIP,
+    GeometryConfig,
     classify,
     distance,
     finger_extended,
@@ -22,17 +33,6 @@ from app.perception.geometry import (
     trace_bbox,
     trace_signed_angle,
     two_hand_spread,
-)
-from conftest import (
-    fist,
-    make_hand,
-    open_hand,
-    pinch_hand,
-    point_hand,
-    thumb_down_hand,
-    thumb_up_hand,
-    two_pinch_hand,
-    v_sign,
 )
 
 
@@ -125,8 +125,7 @@ def test_pinch_respects_threshold():
 
 def test_pinch_index_extension_gate():
     # Thumb near index tip but index curled -> not a pinch.
-    lm = make_hand(fingers={"index": 0.0, "middle": 0.0,
-                            "ring": 0.0, "pinky": 0.0})
+    lm = make_hand(fingers={"index": 0.0, "middle": 0.0, "ring": 0.0, "pinky": 0.0})
     lm[THUMB_TIP] = lm[INDEX_TIP]
     assert not classify(lm).pinch
 
@@ -158,6 +157,7 @@ def test_distance_metric():
 
 def test_two_hand_spread_reflects_palm_distance():
     """Spread grows when the two hands sit far apart in the frame."""
+
     def shifted(lm, dx, dy):
         return [(x + dx, y + dy, z) for x, y, z in lm]
 
@@ -165,8 +165,8 @@ def test_two_hand_spread_reflects_palm_distance():
     right = shifted(open_hand(), 0.3, 0.0)
     close = shifted(open_hand(), 0.05, 0.0)
     assert two_hand_spread(left, right) > two_hand_spread(left, close)
-    assert two_hand_spread(left, close) < 0.4          # not a spread
-    assert two_hand_spread(left, right) > 0.4          # is a spread
+    assert two_hand_spread(left, close) < 0.4  # not a spread
+    assert two_hand_spread(left, right) > 0.4  # is a spread
     assert two_hand_spread(open_hand(), open_hand()) == 0.0
 
 
@@ -179,10 +179,13 @@ def test_middle_tip_constant_sanity():
 # Circle / index-trace detection ("Jarvis" attention)
 # --------------------------------------------------------------------------- #
 
+
 def _circle_points(n=24, r=0.2, cx=0.5, cy=0.5):
     """``n`` points evenly spaced on a circle of radius ``r``."""
-    return [(cx + r * math.cos(2 * math.pi * i / n),
-             cy + r * math.sin(2 * math.pi * i / n)) for i in range(n)]
+    return [
+        (cx + r * math.cos(2 * math.pi * i / n), cy + r * math.sin(2 * math.pi * i / n))
+        for i in range(n)
+    ]
 
 
 def test_full_circle_trace_detected():
@@ -197,9 +200,10 @@ def test_trace_signed_angle_accumulates_full_circle():
     pts = _circle_points()
     assert abs(trace_signed_angle(pts)) > 2 * math.pi - 0.6  # ~2pi
     # A path that sweeps out and back along the same arc cancels toward zero.
-    arc = [(0.5 + 0.2 * math.cos(math.radians(a)),
-            0.5 + 0.2 * math.sin(math.radians(a)))
-           for a in (0, 20, 40, 30, 10, 0)]
+    arc = [
+        (0.5 + 0.2 * math.cos(math.radians(a)), 0.5 + 0.2 * math.sin(math.radians(a)))
+        for a in (0, 20, 40, 30, 10, 0)
+    ]
     assert abs(trace_signed_angle(arc)) < 0.5
 
 
@@ -220,8 +224,10 @@ def test_short_trace_is_not_circle():
 
 def test_open_arc_is_not_circle():
     # Half circle: endpoints far apart and sweep only ~pi.
-    pts = [(0.5 + 0.2 * math.cos(math.pi * i / 6),
-            0.5 + 0.2 * math.sin(math.pi * i / 6)) for i in range(7)]
+    pts = [
+        (0.5 + 0.2 * math.cos(math.pi * i / 6), 0.5 + 0.2 * math.sin(math.pi * i / 6))
+        for i in range(7)
+    ]
     assert is_circle_trace(pts) is False
 
 
@@ -240,6 +246,8 @@ def test_degenerate_trace_is_not_circle():
 
 def test_circle_trace_respects_min_sweep():
     # Same closed square-ish loop: sweep is only ~2pi/4 < 4.5 rad.
-    pts = [(0.5 + 0.2 * math.cos(math.pi / 2 * i),
-            0.5 + 0.2 * math.sin(math.pi / 2 * i)) for i in range(5)]
+    pts = [
+        (0.5 + 0.2 * math.cos(math.pi / 2 * i), 0.5 + 0.2 * math.sin(math.pi / 2 * i))
+        for i in range(5)
+    ]
     assert is_circle_trace(pts) is False

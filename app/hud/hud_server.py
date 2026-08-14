@@ -65,8 +65,11 @@ class HUDServer:
             return False
         if open_browser:
             webbrowser.open(f"http://{self.config.host}:{self.config.port}")
-        logger.info("HUD server on ws://%s:%s (http overlay at same port)",
-                    self.config.host, self.config.port)
+        logger.info(
+            "HUD server on ws://%s:%s (http overlay at same port)",
+            self.config.host,
+            self.config.port,
+        )
         return True
 
     def _serve_thread(self) -> None:  # pragma: no cover - threaded
@@ -75,6 +78,7 @@ class HUDServer:
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         try:
+
             async def _start():
                 return await websockets.serve(
                     self._handler,
@@ -118,9 +122,9 @@ class HUDServer:
             from websockets.datastructures import Headers
 
             body = _read_index_html().encode("utf-8")
-            return Response(200, "OK",
-                            Headers({"Content-Type": "text/html; charset=utf-8"}),
-                            body)
+            return Response(
+                200, "OK", Headers({"Content-Type": "text/html; charset=utf-8"}), body
+            )
         if not is_upgrade:  # plain GET to any other path (e.g. favicon)
             from websockets.asyncio.server import Response
             from websockets.datastructures import Headers
@@ -154,8 +158,7 @@ class HUDServer:
                     self._clients.discard(ws)
 
         for ws in clients:
-            loop.call_soon_threadsafe(
-                asyncio.ensure_future, _send(ws, payload))
+            loop.call_soon_threadsafe(asyncio.ensure_future, _send(ws, payload))
 
     def client_count(self) -> int:
         with self._lock:

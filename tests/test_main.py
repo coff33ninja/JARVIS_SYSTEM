@@ -72,12 +72,23 @@ def test_f4_toggles_keyboard():
 def test_f5_to_f10_route_media():
     calls = []
     stop = make_stop(on_media=calls.append)
-    for key, name in [("Key.f5", "play_pause"), ("Key.f6", "next"),
-                      ("Key.f7", "previous"), ("Key.f8", "volume_mute"),
-                      ("Key.f9", "volume_down"), ("Key.f10", "volume_up")]:
+    for key, name in [
+        ("Key.f5", "play_pause"),
+        ("Key.f6", "next"),
+        ("Key.f7", "previous"),
+        ("Key.f8", "volume_mute"),
+        ("Key.f9", "volume_down"),
+        ("Key.f10", "volume_up"),
+    ]:
         stop._on_press(_FakeKey(key))
-    assert calls == ["play_pause", "next", "previous", "volume_mute",
-                     "volume_down", "volume_up"]
+    assert calls == [
+        "play_pause",
+        "next",
+        "previous",
+        "volume_mute",
+        "volume_down",
+        "volume_up",
+    ]
 
 
 def test_unmapped_key_is_inert():

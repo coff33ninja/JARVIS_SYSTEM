@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class STTConfig:
-    model_size: str = "small"          # tiny | base | small | medium
-    device: str = "cpu"                # cpu | cuda
+    model_size: str = "small"  # tiny | base | small | medium
+    device: str = "cpu"  # cpu | cuda
     compute_type: str = "int8"
     language: str | None = "en"
     beam_size: int = 1
     vad_filter: bool = True
 
     @classmethod
-    def from_env(cls) -> "STTConfig":
+    def from_env(cls) -> STTConfig:
         cfg = cls()
         cfg.model_size = os.getenv("JARVIS_STT_MODEL", cfg.model_size)
         cfg.language = os.getenv("JARVIS_STT_LANGUAGE", cfg.language or "en")

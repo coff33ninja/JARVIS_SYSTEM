@@ -10,15 +10,22 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Optional
 
 from ..config import AppConfig
 from ..control.menu import MenuCategory, MenuItem, MenuState, RadialMenu
 from ..control.modes import Mode, ModeMachine
 from ..control.registry import DEFAULT_BINDINGS, GestureRegistry
 from ..control.virtual_mouse import VirtualMouse
-from ..hud.events import MenuEvent, MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
+from ..hud.events import (
+    MenuEvent,
+    MonitorsEvent,
+    ReticleEvent,
+    SkeletonEvent,
+    StatusEvent,
+)
 from .camera import Camera
 from .geometry import (
     classify,
@@ -85,29 +92,31 @@ class ControlPipeline:
     def __init__(
         self,
         config: AppConfig | None = None,
-        camera: Optional[Camera] = None,
-        tracker: Optional[HandLandmarkerTracker] = None,
-        mouse: Optional[VirtualMouse] = None,
-        mapper: Optional[CursorMapper] = None,
-        hud: Optional[object] = None,
-        modes: Optional[ModeMachine] = None,
-        frame_source: Optional[Callable[[], object]] = None,
-        on_attention: Optional[Callable[[], None]] = None,
-        registry: Optional[GestureRegistry] = None,
+        camera: Camera | None = None,
+        tracker: HandLandmarkerTracker | None = None,
+        mouse: VirtualMouse | None = None,
+        mapper: CursorMapper | None = None,
+        hud: object | None = None,
+        modes: ModeMachine | None = None,
+        frame_source: Callable[[], object] | None = None,
+        on_attention: Callable[[], None] | None = None,
+        registry: GestureRegistry | None = None,
     ):
         self.config = config or AppConfig()
-        self.camera = camera or Camera(self.config.perception.camera_index,
-                                       self.config.perception.width,
-                                       self.config.perception.height)
+        self.camera = camera or Camera(
+            self.config.perception.camera_index,
+            self.config.perception.width,
+            self.config.perception.height,
+        )
         self.tracker = tracker or HandLandmarkerTracker(
             num_hands=self.config.perception.max_hands,
             min_hand_confidence=self.config.perception.min_hand_confidence,
             min_tracking_confidence=self.config.perception.min_tracking_confidence,
         )
-        self.mouse = mouse or VirtualMouse(
-            failsafe=self.config.control.failsafe)
+        self.mouse = mouse or VirtualMouse(failsafe=self.config.control.failsafe)
         self.mapper = mapper or CursorMapper(
-            config=MappingConfig.from_control(self.config.control))
+            config=MappingConfig.from_control(self.config.control)
+        )
         self.hud = hud
         self.modes = modes or ModeMachine()
         self.frame_source = frame_source
@@ -164,8 +173,15 @@ class ControlPipeline:
     # (circle) and "mode.transfer_toggle" (spread) dispatch outside _dispatch,
     # so toggling them here would lie — they stay out of the menu.
     DISPATCH_ACTIONS = (
-        "cursor.move", "click.left", "click.right", "drag.toggle",
-        "scroll.tick", "confirm", "cancel", "catch", "release",
+        "cursor.move",
+        "click.left",
+        "click.right",
+        "drag.toggle",
+        "scroll.tick",
+        "confirm",
+        "cancel",
+        "catch",
+        "release",
     )
 
     @staticmethod
@@ -180,52 +196,115 @@ class ControlPipeline:
         is built from the detected monitor layout and hides itself when empty.
         """
         mode_items = [
-            MenuItem(f"mode.{m.value}", m.value.capitalize(),
-                     action_id="mode.change", params={"mode": m.value})
-            for m in (Mode.CONTROL, Mode.CHAT, Mode.TRANSFER,
-                      Mode.PRESENTATION, Mode.IDLE)
+            MenuItem(
+                f"mode.{m.value}",
+                m.value.capitalize(),
+                action_id="mode.change",
+                params={"mode": m.value},
+            )
+            for m in (
+                Mode.CONTROL,
+                Mode.CHAT,
+                Mode.TRANSFER,
+                Mode.PRESENTATION,
+                Mode.IDLE,
+            )
         ]
         screen_items = [
-            MenuItem(f"screen.{i}", f"Monitor {i + 1}",
-                     action_id="screen.select", params={"index": i})
+            MenuItem(
+                f"screen.{i}",
+                f"Monitor {i + 1}",
+                action_id="screen.select",
+                params={"index": i},
+            )
             for i in range(len(self.mapper.monitors))
         ]
-        screen_items.append(MenuItem(
-            "screen.all", "All screens", action_id="screen.select",
-            params={"index": None}))
+        screen_items.append(
+            MenuItem(
+                "screen.all",
+                "All screens",
+                action_id="screen.select",
+                params={"index": None},
+            )
+        )
         gesture_items = [
-            MenuItem(action_id, self._action_label(action_id),
-                     action_id="gesture.toggle", params={"action": action_id},
-                     checked=all(b.enabled
-                                 for b in self._registry.by_action(action_id)))
+            MenuItem(
+                action_id,
+                self._action_label(action_id),
+                action_id="gesture.toggle",
+                params={"action": action_id},
+                checked=all(b.enabled for b in self._registry.by_action(action_id)),
+            )
             for action_id in self.DISPATCH_ACTIONS
             if self._registry.by_action(action_id)
         ]
-        return RadialMenu([
-            MenuCategory("modes", "Modes", items=mode_items),
-            MenuCategory("screens", "Screens", items=screen_items),
-            MenuCategory("zoom", "Zoom", items=[
-                MenuItem("zoom.in", "Zoom in", action_id="zoom",
-                         params={"direction": "in"}),
-                MenuItem("zoom.out", "Zoom out", action_id="zoom",
-                         params={"direction": "out"}),
-            ]),
-            MenuCategory("tune", "Tune", items=[
-                MenuItem("tune.gain_x_up", "Gain X +", action_id="tune",
-                         params={"param": "gain_x_up"}),
-                MenuItem("tune.gain_x_down", "Gain X -", action_id="tune",
-                         params={"param": "gain_x_down"}),
-                MenuItem("tune.gain_y_up", "Gain Y +", action_id="tune",
-                         params={"param": "gain_y_up"}),
-                MenuItem("tune.gain_y_down", "Gain Y -", action_id="tune",
-                         params={"param": "gain_y_down"}),
-                MenuItem("tune.invert_x", "Invert X", action_id="tune",
-                         params={"param": "invert_x"}),
-                MenuItem("tune.invert_y", "Invert Y", action_id="tune",
-                         params={"param": "invert_y"}),
-            ]),
-            MenuCategory("gestures", "Gestures", items=gesture_items),
-        ])
+        return RadialMenu(
+            [
+                MenuCategory("modes", "Modes", items=mode_items),
+                MenuCategory("screens", "Screens", items=screen_items),
+                MenuCategory(
+                    "zoom",
+                    "Zoom",
+                    items=[
+                        MenuItem(
+                            "zoom.in",
+                            "Zoom in",
+                            action_id="zoom",
+                            params={"direction": "in"},
+                        ),
+                        MenuItem(
+                            "zoom.out",
+                            "Zoom out",
+                            action_id="zoom",
+                            params={"direction": "out"},
+                        ),
+                    ],
+                ),
+                MenuCategory(
+                    "tune",
+                    "Tune",
+                    items=[
+                        MenuItem(
+                            "tune.gain_x_up",
+                            "Gain X +",
+                            action_id="tune",
+                            params={"param": "gain_x_up"},
+                        ),
+                        MenuItem(
+                            "tune.gain_x_down",
+                            "Gain X -",
+                            action_id="tune",
+                            params={"param": "gain_x_down"},
+                        ),
+                        MenuItem(
+                            "tune.gain_y_up",
+                            "Gain Y +",
+                            action_id="tune",
+                            params={"param": "gain_y_up"},
+                        ),
+                        MenuItem(
+                            "tune.gain_y_down",
+                            "Gain Y -",
+                            action_id="tune",
+                            params={"param": "gain_y_down"},
+                        ),
+                        MenuItem(
+                            "tune.invert_x",
+                            "Invert X",
+                            action_id="tune",
+                            params={"param": "invert_x"},
+                        ),
+                        MenuItem(
+                            "tune.invert_y",
+                            "Invert Y",
+                            action_id="tune",
+                            params={"param": "invert_y"},
+                        ),
+                    ],
+                ),
+                MenuCategory("gestures", "Gestures", items=gesture_items),
+            ]
+        )
 
     # ------------------------------------------------------------------ #
     # guided calibration (app/calibrate/session.py)
@@ -298,8 +377,11 @@ class ControlPipeline:
         # Misfire guard: with both hands up in a resting pose (e.g. a two-hand
         # spread), the spread handler owns the frame — don't also let the
         # primary open palm fire catch/release.
-        if (not menu_was_open and self._menu.state is not MenuState.OPEN
-                and not self._rest_pose(result, pose)):
+        if (
+            not menu_was_open
+            and self._menu.state is not MenuState.OPEN
+            and not self._rest_pose(result, pose)
+        ):
             actions.extend(self._dispatch(pose))
         actions.extend(self._circle(pose))
         if self._menu_dirty or self._menu.state is not MenuState.CLOSED:
@@ -366,7 +448,6 @@ class ControlPipeline:
         Returns True when the menu was open at entry — the caller suspends
         gesture dispatch for that frame.
         """
-        menu_was_open = self._menu.state is MenuState.OPEN
         mod = self._modifier_hand(result)
         if self._menu.state is MenuState.OPEN:
             self._menu_frame(result, pose, mod, actions)
@@ -415,9 +496,11 @@ class ControlPipeline:
             self._mod_fist_start = now
             return True
         hold = cfg.menu_hold_ms / 1000.0 if cfg.menu_hold_ms > 0 else 0.0
-        if (now - self._mod_fist_start >= hold
-                and self._menu.state is MenuState.CLOSED
-                and self._menu.open()):
+        if (
+            now - self._mod_fist_start >= hold
+            and self._menu.state is MenuState.CLOSED
+            and self._menu.open()
+        ):
             self._menu_open_at = now
             self._menu_dirty = True
             actions.append(PipelineAction("menu.open", gesture="fist"))
@@ -439,8 +522,9 @@ class ControlPipeline:
             return mod.finger_count
         return None
 
-    def _finger_count_select(self, mod: ModifierInfo, pose,
-                             actions: list[PipelineAction]) -> bool:
+    def _finger_count_select(
+        self, mod: ModifierInfo, pose, actions: list[PipelineAction]
+    ) -> bool:
         """Edge-trigger a direct monitor selection from the finger count.
 
         Debounced by ``hold_frames`` so finger jitter (1 vs 2) can't re-fire.
@@ -458,13 +542,14 @@ class ControlPipeline:
             self._mod_count_fired = False
         else:
             self._mod_count_frames += 1
-        if (self._mod_count_frames >= self.config.control.hold_frames
-                and not self._mod_count_fired):
+        if (
+            self._mod_count_frames >= self.config.control.hold_frames
+            and not self._mod_count_fired
+        ):
             self._mod_count_fired = True
             idx = count - 1
             if self.mapper.set_active_monitor(idx):
-                actions.append(PipelineAction("screen.select", (idx,),
-                                              gesture="count"))
+                actions.append(PipelineAction("screen.select", (idx,), gesture="count"))
         return True
 
     def _zone_target(self, zone: LateralZone) -> int | None:
@@ -475,10 +560,13 @@ class ControlPipeline:
         active = self.mapper.config.active_monitor
         if zone is LateralZone.LEFT:
             return 0 if active is None else max(0, active - 1)
-        return len(monitors) - 1 if active is None else min(len(monitors) - 1, active + 1)
+        return (
+            len(monitors) - 1 if active is None else min(len(monitors) - 1, active + 1)
+        )
 
-    def _passive_zone_select(self, mod: ModifierInfo,
-                             actions: list[PipelineAction]) -> None:
+    def _passive_zone_select(
+        self, mod: ModifierInfo, actions: list[PipelineAction]
+    ) -> None:
         """Passive monitor selection: hold a lateral zone ``zone_hold_ms``.
 
         The active monitor only changes after the secondary hand holds the
@@ -503,14 +591,18 @@ class ControlPipeline:
             self._mod_zone_start = now
             self._mod_zone_fired = False
             return
-        if (now - self._mod_zone_start >= cfg.zone_hold_ms / 1000.0
-                and not self._mod_zone_fired):
+        if (
+            now - self._mod_zone_start >= cfg.zone_hold_ms / 1000.0
+            and not self._mod_zone_fired
+        ):
             self._mod_zone_fired = True
             idx = self._zone_target(zone)
-            if (idx is not None and idx != self.mapper.config.active_monitor
-                    and self.mapper.set_active_monitor(idx)):
-                actions.append(PipelineAction("screen.select", (idx,),
-                                              gesture="zone"))
+            if (
+                idx is not None
+                and idx != self.mapper.config.active_monitor
+                and self.mapper.set_active_monitor(idx)
+            ):
+                actions.append(PipelineAction("screen.select", (idx,), gesture="zone"))
 
     def _reset_modifier_state(self) -> None:
         self._mod_fist_start = 0.0
@@ -525,8 +617,9 @@ class ControlPipeline:
     # fist menu interaction
     # ------------------------------------------------------------------ #
 
-    def _menu_frame(self, result, pose, mod: ModifierInfo | None,
-                    actions: list[PipelineAction]) -> None:
+    def _menu_frame(
+        self, result, pose, mod: ModifierInfo | None, actions: list[PipelineAction]
+    ) -> None:
         """One frame of the open menu: timeout, cancel, highlight, confirm."""
         cfg = self.config.control
         now = time.monotonic()
@@ -559,8 +652,7 @@ class ControlPipeline:
                 self._menu.close()
                 self._prev_pinch = True
                 self._menu_dirty = True
-                actions.append(PipelineAction("menu.confirm",
-                                              gesture="pinch"))
+                actions.append(PipelineAction("menu.confirm", gesture="pinch"))
                 executed = self._execute_menu_item(item)
                 if executed is not None:
                     actions.append(executed)
@@ -578,13 +670,13 @@ class ControlPipeline:
             except ValueError:
                 return None
             self.modes.goto(target)
-            return PipelineAction("mode.change", (target.value,),
-                                  gesture="menu")
+            return PipelineAction("mode.change", (target.value,), gesture="menu")
         elif pid == "zoom":
             direction = item.params.get("direction", "in")
             self.mouse.hotkey("ctrl", "+" if direction == "in" else "-")
-            return PipelineAction("zoom_in" if direction == "in" else "zoom_out",
-                                  gesture="menu")
+            return PipelineAction(
+                "zoom_in" if direction == "in" else "zoom_out", gesture="menu"
+            )
         elif pid == "tune":
             return self._tune(item.params.get("param"))
         elif pid == "gesture.toggle":
@@ -605,8 +697,7 @@ class ControlPipeline:
                 if it.id == action_id:
                     it.checked = target
         self._menu_dirty = True
-        return PipelineAction("gesture.toggle", (action_id, target),
-                              gesture="menu")
+        return PipelineAction("gesture.toggle", (action_id, target), gesture="menu")
 
     def _tune(self, param: str) -> PipelineAction | None:
         """Apply a Tune-category adjustment (gain / invert), live."""
@@ -645,12 +736,16 @@ class ControlPipeline:
             self._spread_active = False
             self._spread_frames = 0
             return
-        spread = (two_hand_spread(hands[0], hands[1])
-                  >= self.config.control.two_hand_spread_threshold)
+        spread = (
+            two_hand_spread(hands[0], hands[1])
+            >= self.config.control.two_hand_spread_threshold
+        )
         if spread:
             self._spread_frames += 1
-            if (self._spread_frames >= self.config.control.hold_frames
-                    and not self._spread_active):
+            if (
+                self._spread_frames >= self.config.control.hold_frames
+                and not self._spread_active
+            ):
                 self._spread_active = True
                 self.modes.transition("transfer_gesture")
         else:
@@ -667,8 +762,7 @@ class ControlPipeline:
         spread starts from a fresh distance.
         """
         hands = result.hands or []
-        if (len(hands) < 2
-                or self.modes.mode not in (Mode.CONTROL, Mode.TRANSFER)):
+        if len(hands) < 2 or self.modes.mode not in (Mode.CONTROL, Mode.TRANSFER):
             self._zoom_ref = None
             self._zoom_accum = 0.0
             return
@@ -724,7 +818,7 @@ class ControlPipeline:
         if pose.index_extended and not pose.pinch and not pose.open_palm:
             self._trace.append(pose.index_xy)
             if len(self._trace) > cfg.circle_max_samples:
-                self._trace = self._trace[-cfg.circle_max_samples:]
+                self._trace = self._trace[-cfg.circle_max_samples :]
         else:
             self._trace = []
         if len(self._trace) < cfg.circle_min_samples:
@@ -732,11 +826,12 @@ class ControlPipeline:
         if now - self._trace_last < cfg.circle_cooldown_ms / 1000.0:
             return []
         if not is_circle_trace(
-                self._trace,
-                min_samples=cfg.circle_min_samples,
-                min_sweep=cfg.circle_min_sweep,
-                max_aspect=cfg.circle_max_aspect,
-                endpoint_tol=cfg.circle_endpoint_tol):
+            self._trace,
+            min_samples=cfg.circle_min_samples,
+            min_sweep=cfg.circle_min_sweep,
+            max_aspect=cfg.circle_max_aspect,
+            endpoint_tol=cfg.circle_endpoint_tol,
+        ):
             return []
         self._trace = []
         self._trace_last = now
@@ -796,13 +891,14 @@ class ControlPipeline:
         action_id = self._registry.resolve(gesture, mode.value)
         return self._run_action(action_id, gesture, pose, actions)
 
-    def _run_action(self, action_id: str | None, gesture: str, pose,
-                    actions: list[PipelineAction]) -> list[PipelineAction]:
+    def _run_action(
+        self, action_id: str | None, gesture: str, pose, actions: list[PipelineAction]
+    ) -> list[PipelineAction]:
         """Execute the resolved action. None = unbound/disabled gesture."""
         if action_id is None:
             return actions
         if action_id == "cursor.move":
-            sx, sy = self._move_cursor(pose.index_xy, actions)
+            sx, _sy = self._move_cursor(pose.index_xy, actions)
             self._swipe(sx, actions)
         elif action_id == "click.left":
             if self._calibration_armed and self._calibration_capture is not None:
@@ -860,8 +956,9 @@ class ControlPipeline:
             self._last_gesture = gesture
         return self._gesture_frames >= self.config.control.hold_frames
 
-    def _move_cursor(self, index_xy: tuple[float, float],
-                     actions: list[PipelineAction]) -> tuple[int, int]:
+    def _move_cursor(
+        self, index_xy: tuple[float, float], actions: list[PipelineAction]
+    ) -> tuple[int, int]:
         sx, sy = self._smoothed_screen(index_xy)
         self.mouse.move(sx, sy)
         actions.append(PipelineAction("move", (sx, sy), gesture="point"))
@@ -874,7 +971,8 @@ class ControlPipeline:
 
             c = self.config.control
             self._smoothing = OneEuroVectorFilter(
-                2, min_cutoff=c.min_cutoff, beta=c.beta, d_cutoff=c.d_cutoff)
+                2, min_cutoff=c.min_cutoff, beta=c.beta, d_cutoff=c.d_cutoff
+            )
         x, y = self._smoothing(index_xy)
         return self.mapper.to_screen(x, y)
 
@@ -936,7 +1034,7 @@ class ControlPipeline:
         elif direction == "left":
             self.mouse.hotkey("alt", "shift", "tab")  # previous window
         else:
-            self.mouse.hotkey("alt", "tab")           # next window
+            self.mouse.hotkey("alt", "tab")  # next window
         actions.append(PipelineAction("swipe_" + direction, gesture="point"))
 
     def _scroll(self, pose, actions: list[PipelineAction]) -> None:
@@ -953,7 +1051,7 @@ class ControlPipeline:
         if not self._v_sign_active:
             self._prev_scroll_y = ny
             self._v_sign_active = True
-        self._scroll_accum += (self._prev_scroll_y - ny)
+        self._scroll_accum += self._prev_scroll_y - ny
         self._prev_scroll_y = ny
         ticks = int(self._scroll_accum / self.config.control.scroll_threshold)
         if ticks:
@@ -1006,18 +1104,26 @@ class ControlPipeline:
         if pose is not None:
             self._status_gesture = pose.name
         if not self._monitors_sent:
-            self.hud.broadcast(MonitorsEvent(
-                monitors=self.mapper.monitors,
-                active_monitor=self.mapper.config.active_monitor,
-            ))
+            self.hud.broadcast(
+                MonitorsEvent(
+                    monitors=self.mapper.monitors,
+                    active_monitor=self.mapper.config.active_monitor,
+                )
+            )
             self._monitors_sent = True
         if now - self._last_skeleton_ts >= self.config.hud.skeleton_interval_s:
             self.hud.broadcast(SkeletonEvent(hands=result.hands or []))
             self._last_skeleton_ts = now
         if pose is not None and pose.index_extended:
             (sx, sy), monitor = self.mapper.point_at_zone(*pose.index_xy)
-            self.hud.broadcast(ReticleEvent(
-                x=sx, y=sy, monitor=monitor, zone=self.mapper.zone_for(*pose.index_xy)))
+            self.hud.broadcast(
+                ReticleEvent(
+                    x=sx,
+                    y=sy,
+                    monitor=monitor,
+                    zone=self.mapper.zone_for(*pose.index_xy),
+                )
+            )
         self._emit_status()
 
     def _broadcast_menu(self) -> None:
@@ -1031,18 +1137,28 @@ class ControlPipeline:
             if 0 <= self._menu.category_idx < len(cats):
                 category = cats[self._menu.category_idx].id
                 items = cats[self._menu.category_idx].items
-                if self._menu.item_idx is not None and 0 <= self._menu.item_idx < len(items):
+                if self._menu.item_idx is not None and 0 <= self._menu.item_idx < len(
+                    items
+                ):
                     item = items[self._menu.item_idx].id
-        self.hud.broadcast(MenuEvent(
-            state=self._menu.state.value,
-            category=category,
-            item=item,
-            categories=[{"id": c.id, "label": c.label,
-                         "items": [{"id": i.id, "label": i.label,
-                                    "checked": i.checked}
-                                   for i in c.items]}
-                        for c in cats],
-        ))
+        self.hud.broadcast(
+            MenuEvent(
+                state=self._menu.state.value,
+                category=category,
+                item=item,
+                categories=[
+                    {
+                        "id": c.id,
+                        "label": c.label,
+                        "items": [
+                            {"id": i.id, "label": i.label, "checked": i.checked}
+                            for i in c.items
+                        ],
+                    }
+                    for c in cats
+                ],
+            )
+        )
         self._menu_dirty = False
 
     def _emit_status(self) -> None:
@@ -1052,12 +1168,14 @@ class ControlPipeline:
         if now - self._last_status_ts < self.config.hud.status_interval_s:
             return
         self._last_status_ts = now
-        self.hud.broadcast(StatusEvent(
-            mode=self.modes.mode.value,
-            fps=self.stats.last_fps,
-            detected=self.stats.hands_seen >= self.stats.frames - 1,
-            gesture=self._status_gesture,
-        ))
+        self.hud.broadcast(
+            StatusEvent(
+                mode=self.modes.mode.value,
+                fps=self.stats.last_fps,
+                detected=self.stats.hands_seen >= self.stats.frames - 1,
+                gesture=self._status_gesture,
+            )
+        )
 
     def _tick_fps(self) -> None:
         now = time.monotonic()

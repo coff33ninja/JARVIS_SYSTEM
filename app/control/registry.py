@@ -23,8 +23,8 @@ from typing import Any
 class GestureBinding:
     """One gesture condition bound to one action."""
 
-    action_id: str          # stable action ID (e.g. "click.left")
-    gesture: str            # pose / trajectory name (e.g. "pinch")
+    action_id: str  # stable action ID (e.g. "click.left")
+    gesture: str  # pose / trajectory name (e.g. "pinch")
     mode: str | None = None  # None = any mode
     enabled: bool = True
     params: dict[str, Any] = field(default_factory=dict)
@@ -57,8 +57,7 @@ class GestureRegistry:
     def __init__(self, bindings: list[GestureBinding] | None = None):
         # Copy, don't share: toggling a binding's enabled state must not leak
         # into another registry or the DEFAULT_BINDINGS module constant.
-        self._bindings = [replace(b, params=dict(b.params))
-                          for b in (bindings or [])]
+        self._bindings = [replace(b, params=dict(b.params)) for b in (bindings or [])]
 
     # ------------------------------------------------------------------ #
     # mutation
@@ -77,7 +76,8 @@ class GestureRegistry:
             if existing.key == binding.key:
                 return False
             if existing.gesture == binding.gesture and (
-                    existing.mode is None or binding.mode is None):
+                existing.mode is None or binding.mode is None
+            ):
                 return False
         self._bindings.append(binding)
         return True

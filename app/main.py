@@ -30,23 +30,29 @@ from app.perception.camera import Camera
 from app.perception.hand_tracker import HandLandmarkerTracker
 from app.perception.pipeline import ControlPipeline
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 logger = logging.getLogger("jarvis.main")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="JARVIS Phase 1 control loop")
-    p.add_argument("--smoke", action="store_true",
-                   help="webcam skeleton window only (no mouse control)")
-    p.add_argument("--no-hud", action="store_true",
-                   help="disable the overlay websocket server")
+    p.add_argument(
+        "--smoke",
+        action="store_true",
+        help="webcam skeleton window only (no mouse control)",
+    )
+    p.add_argument(
+        "--no-hud", action="store_true", help="disable the overlay websocket server"
+    )
     p.add_argument("--config", default=None, help="path to jarvis.yaml")
     return p.parse_args(argv)
 
 
-def build_pipeline(args: argparse.Namespace, cfg: AppConfig,
-                   on_attention=None) -> ControlPipeline:
+def build_pipeline(
+    args: argparse.Namespace, cfg: AppConfig, on_attention=None
+) -> ControlPipeline:
     hud = None
     if not args.no_hud and cfg.hud.enabled:
         server = HUDServer(HUDConfig(host=cfg.hud.host, port=cfg.hud.port))
@@ -63,15 +69,19 @@ def main(argv: list[str] | None = None) -> int:
         return _smoke(cfg)
 
     pipeline = build_pipeline(
-        args, cfg,
+        args,
+        cfg,
         on_attention=lambda: logger.info("attention: 'Jarvis' circle gesture"),
     )
     calibrate = None
     if not args.no_hud and cfg.hud.enabled:
         calibrate = CalibrationServer(
-            config=cfg, live_pipeline=pipeline,
+            config=cfg,
+            live_pipeline=pipeline,
             server_config=CalibrationConfig(
-                host=cfg.hud.calibrate_host, port=cfg.hud.calibrate_port))
+                host=cfg.hud.calibrate_host, port=cfg.hud.calibrate_port
+            ),
+        )
         calibrate.start()
     keyboard = VirtualKeyboard()
     media = MediaController()
@@ -81,15 +91,17 @@ def main(argv: list[str] | None = None) -> int:
         on_keyboard_toggle=keyboard.toggle_osk,
         on_media=lambda name: media.action(name),
     )
-    logger.info("JARVIS Phase 1 running (ESC/q to quit). "
-                "Pinch = click, two-finger pinch = right click, "
-                "fist = drag, V-sign = scroll, swipe = next/prev window. "
-                "Two-hand spread = Transfer mode. "
-                "Circle (index trace) = attention 'Jarvis'. "
-                "F2 = idle/control toggle, F3 = presentation mode, "
-                "F4 = on-screen keyboard. "
-                "F5/F6/F7 = play-pause/next/previous, F8 mute, "
-                "F9/F10 = volume down/up.")
+    logger.info(
+        "JARVIS Phase 1 running (ESC/q to quit). "
+        "Pinch = click, two-finger pinch = right click, "
+        "fist = drag, V-sign = scroll, swipe = next/prev window. "
+        "Two-hand spread = Transfer mode. "
+        "Circle (index trace) = attention 'Jarvis'. "
+        "F2 = idle/control toggle, F3 = presentation mode, "
+        "F4 = on-screen keyboard. "
+        "F5/F6/F7 = play-pause/next/previous, F8 mute, "
+        "F9/F10 = volume down/up."
+    )
     try:
         _loop(pipeline, stop)
     except KeyboardInterrupt:
@@ -102,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _loop(pipeline: ControlPipeline, stop: "_StopKey") -> None:
+def _loop(pipeline: ControlPipeline, stop: _StopKey) -> None:
     last = time.monotonic()
     while not stop.triggered:
         pipeline.step()
@@ -110,17 +122,26 @@ def _loop(pipeline: ControlPipeline, stop: "_StopKey") -> None:
         if now - last >= 5.0:
             last = now
             s = pipeline.stats
-            logger.info("frames=%d detected=%.0f%% fps=%.1f mode=%s",
-                        s.frames, s.detection_rate * 100, s.last_fps,
-                        pipeline.modes.mode.value)
+            logger.info(
+                "frames=%d detected=%.0f%% fps=%.1f mode=%s",
+                s.frames,
+                s.detection_rate * 100,
+                s.last_fps,
+                pipeline.modes.mode.value,
+            )
         stop.wait(0.01)
 
 
 class _StopKey:
     """Background key listener: ESC/q quit, F2/F3 mode toggles, F4 OSK, F5-F10 media."""
 
-    def __init__(self, on_mode_toggle=None, on_present_toggle=None,
-                 on_keyboard_toggle=None, on_media=None):
+    def __init__(
+        self,
+        on_mode_toggle=None,
+        on_present_toggle=None,
+        on_keyboard_toggle=None,
+        on_media=None,
+    ):
         import threading
 
         self._event = threading.Event()
@@ -176,15 +197,19 @@ class _StopKey:
 
 def _smoke(cfg: AppConfig) -> int:
     """Webcam window with hand-skeleton overlay (07_SETUP verification)."""
-    cam = Camera(cfg.perception.camera_index,
-                 cfg.perception.width, cfg.perception.height)
+    cam = Camera(
+        cfg.perception.camera_index, cfg.perception.width, cfg.perception.height
+    )
     tracker = HandLandmarkerTracker(
         num_hands=cfg.perception.max_hands,
         min_hand_confidence=cfg.perception.min_hand_confidence,
-        min_tracking_confidence=cfg.perception.min_tracking_confidence)
+        min_tracking_confidence=cfg.perception.min_tracking_confidence,
+    )
     if not tracker.available:
-        logger.error("hand tracker unavailable (model missing?). "
-                     "Run `uv run python scripts/smoke_test_hands.py`.")
+        logger.error(
+            "hand tracker unavailable (model missing?). "
+            "Run `uv run python scripts/smoke_test_hands.py`."
+        )
         return 1
     print("JARVIS smoke test — press ESC to quit.")
     with cam:
@@ -196,9 +221,13 @@ def _smoke(cfg: AppConfig) -> int:
             result = tracker.process(frame)
             for lmks in result.hands or []:
                 for x, y, _ in lmks:
-                    cv2.circle(frame, (int(x * frame.shape[1]),
-                                       int(y * frame.shape[0])), 3,
-                               (0, 255, 0), -1)
+                    cv2.circle(
+                        frame,
+                        (int(x * frame.shape[1]), int(y * frame.shape[0])),
+                        3,
+                        (0, 255, 0),
+                        -1,
+                    )
             cv2.imshow("JARVIS hand tracking", frame)
             if cv2.waitKey(1) & 0xFF in (27, ord("q")):
                 break

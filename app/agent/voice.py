@@ -12,8 +12,9 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +22,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VoiceConfig:
     wake_word: str = "jarvis"
-    wake_mode: str = "keyword"     # keyword | push_to_talk | off
+    wake_mode: str = "keyword"  # keyword | push_to_talk | off
     max_seconds: float = 8.0
     min_rms: float = 0.005
 
     @classmethod
-    def from_env(cls) -> "VoiceConfig":
+    def from_env(cls) -> VoiceConfig:
         cfg = cls()
         cfg.wake_word = os.getenv("JARVIS_WAKE_WORD", cfg.wake_word)
         cfg.wake_mode = os.getenv("JARVIS_WAKE_MODE", cfg.wake_mode)
@@ -34,8 +35,15 @@ class VoiceConfig:
 
 
 class VoiceLoop:
-    def __init__(self, agent, stt, tts, mic=None, config: VoiceConfig | None = None,
-                 on_command: Optional[Callable[[str], Optional[str]]] = None):
+    def __init__(
+        self,
+        agent,
+        stt,
+        tts,
+        mic=None,
+        config: VoiceConfig | None = None,
+        on_command: Callable[[str], str | None] | None = None,
+    ):
         self.agent = agent
         self.stt = stt
         self.tts = tts
@@ -58,7 +66,7 @@ class VoiceLoop:
         idx = low.find(wl)
         if idx == -1:
             return text
-        return text[idx + len(wl):].lstrip(" ,.!-:;")
+        return text[idx + len(wl) :].lstrip(" ,.!-:;")
 
     def run_once(self, trigger: str | None = None) -> dict | None:
         """One full voice turn. Returns None when not a command.
@@ -108,7 +116,9 @@ class VoiceLoop:
             "transcript": self.agent.transcript(),
         }
 
-    def run(self, stop_event: threading.Event | None = None, interval: float = 0.2) -> None:
+    def run(
+        self, stop_event: threading.Event | None = None, interval: float = 0.2
+    ) -> None:
         """Infinite loop; pass a threading.Event to stop."""
         while not (stop_event and stop_event.is_set()):
             try:

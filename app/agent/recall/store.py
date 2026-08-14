@@ -56,8 +56,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(
 """
 
 _FACT_COLS = (
-    "id", "content", "kind", "tags", "importance",
-    "created_at", "updated_at", "recall_count", "last_recalled_at",
+    "id",
+    "content",
+    "kind",
+    "tags",
+    "importance",
+    "created_at",
+    "updated_at",
+    "recall_count",
+    "last_recalled_at",
 )
 _EPISODE_COLS = ("id", "session_id", "role", "content", "created_at")
 
@@ -104,7 +111,7 @@ class MemoryStore:
     def close(self) -> None:
         self._conn.close()
 
-    def __enter__(self) -> "MemoryStore":
+    def __enter__(self) -> MemoryStore:
         return self
 
     def __exit__(self, *exc) -> None:
@@ -204,7 +211,9 @@ class MemoryStore:
         ).fetchone()
         return dict(row) if row else None
 
-    def recent_episodes(self, session_id: str | None = None, limit: int = 20) -> list[dict]:
+    def recent_episodes(
+        self, session_id: str | None = None, limit: int = 20
+    ) -> list[dict]:
         if session_id is None:
             cur = self._conn.execute(
                 "SELECT * FROM episodes ORDER BY id DESC LIMIT ?", (limit,)
@@ -217,7 +226,10 @@ class MemoryStore:
         return [dict(r) for r in reversed(cur.fetchall())]
 
     def keyword_search(
-        self, query: str, limit: int = 10, tables: tuple[str, ...] = ("facts", "episodes")
+        self,
+        query: str,
+        limit: int = 10,
+        tables: tuple[str, ...] = ("facts", "episodes"),
     ) -> list[dict]:
         """BM25 (FTS5) search over facts + episodes, else LIKE fallback."""
         hits = self._fts_search(query, limit, tables)
@@ -242,7 +254,9 @@ class MemoryStore:
         )
         return [(r["table_name"], r["row_id"], r["vector"]) for r in cur.fetchall()]
 
-    def store_embedding(self, table: str, row_id: int, model: str, vector: bytes) -> None:
+    def store_embedding(
+        self, table: str, row_id: int, model: str, vector: bytes
+    ) -> None:
         self._conn.execute(
             "INSERT OR REPLACE INTO embeddings (table_name, row_id, model, vector) "
             "VALUES (?, ?, ?, ?)",
@@ -277,7 +291,9 @@ class MemoryStore:
     # internals
     # ------------------------------------------------------------------ #
 
-    def _insert_fts(self, table: str, row_id: int, content: str, tags: str, kind: str) -> None:
+    def _insert_fts(
+        self, table: str, row_id: int, content: str, tags: str, kind: str
+    ) -> None:
         if not self._fts_available:
             return
         try:

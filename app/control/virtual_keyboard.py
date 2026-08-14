@@ -81,7 +81,10 @@ class VirtualKeyboard:
         try:
             out = subprocess.run(
                 ["tasklist", "/FI", "IMAGENAME eq osk.exe"],
-                capture_output=True, text=True, timeout=5).stdout
+                capture_output=True,
+                text=True,
+                timeout=5,
+            ).stdout
         except (OSError, subprocess.TimeoutExpired):  # pragma: no cover
             return False
         return "osk.exe" in out
@@ -95,8 +98,9 @@ class VirtualKeyboard:
             return False
         if self.osk_running():
             try:
-                subprocess.run(["taskkill", "/IM", "osk.exe", "/F"],
-                               capture_output=True, timeout=5)
+                subprocess.run(
+                    ["taskkill", "/IM", "osk.exe", "/F"], capture_output=True, timeout=5
+                )
             except (OSError, subprocess.TimeoutExpired):  # pragma: no cover
                 pass
             return False
@@ -139,7 +143,8 @@ class MediaController:
             return
         key = getattr(self._key, attr, None)
         if key is None:
-            logger.warning("media key %r unsupported on this platform; "
-                           "ignoring", attr)
+            logger.warning(
+                "media key %r unsupported on this platform; " "ignoring", attr
+            )
             return
         self._ctrl().tap(key)

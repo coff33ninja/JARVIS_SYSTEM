@@ -31,7 +31,7 @@ class LLMConfig:
     extra: dict = field(default_factory=dict)
 
     @classmethod
-    def from_env(cls) -> "LLMConfig":
+    def from_env(cls) -> LLMConfig:
         cfg = cls()
         cfg.base_url = os.getenv("JARVIS_LLM_BASE_URL", cfg.base_url)
         cfg.model = os.getenv("JARVIS_LLM_MODEL", cfg.model)
@@ -81,8 +81,9 @@ class LLMClient:
             client.models.list()
             self._ping_ok = True
         except Exception as exc:
-            logger.warning("LLM endpoint unreachable (%s): %s",
-                           self.config.base_url, exc)
+            logger.warning(
+                "LLM endpoint unreachable (%s): %s", self.config.base_url, exc
+            )
         return self._ping_ok
 
     # ------------------------------------------------------------------ #
@@ -118,19 +119,24 @@ class LLMClient:
         if want in installed:
             return True
         if not self.config.auto_pull:
-            logger.info("model '%s' not installed and auto-pull is disabled "
-                        "(JARVIS_LLM_AUTO_PULL=0)", self.config.model)
+            logger.info(
+                "model '%s' not installed and auto-pull is disabled "
+                "(JARVIS_LLM_AUTO_PULL=0)",
+                self.config.model,
+            )
             return False
         if self._ollama_pull(self.config.model):
             return True
-        logger.info("could not auto-install '%s'; run `ollama pull %s`",
-                    self.config.model, self.config.model)
+        logger.info(
+            "could not auto-install '%s'; run `ollama pull %s`",
+            self.config.model,
+            self.config.model,
+        )
         return False
 
     def _ollama_base(self) -> str:
         base = self.config.base_url.rstrip("/")
-        if base.endswith("/v1"):
-            base = base[:-3]
+        base = base.removesuffix("/v1")
         return base.rstrip("/")
 
     def _ollama_pull(self, name: str) -> bool:

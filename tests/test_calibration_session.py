@@ -15,6 +15,7 @@ PTS = [(0.05, 0.05), (0.95, 0.05), (0.95, 0.95), (0.05, 0.95)]
 # CalibrationSession (pure state machine)
 # --------------------------------------------------------------------- #
 
+
 def test_session_steps_through_corners_in_order():
     s = CalibrationSession(SCREEN)
     assert s.current.label == "top_left"
@@ -67,10 +68,10 @@ def test_session_cancel_resets():
 # CalibrationController (pipeline + config glue)
 # --------------------------------------------------------------------- #
 
+
 class _FakeMapper:
     def __init__(self):
-        self.config = MappingConfig(screen=SCREEN,
-                                    monitors=[(0, 0, 1000, 800)])
+        self.config = MappingConfig(screen=SCREEN, monitors=[(0, 0, 1000, 800)])
 
 
 class _FakePipe:

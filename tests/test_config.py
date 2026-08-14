@@ -46,8 +46,7 @@ def test_save_load_roundtrip(tmp_path):
 
 def test_load_coerces_strings(tmp_path):
     path = tmp_path / "j.yaml"
-    path.write_text(
-        yaml.safe_dump({"control": {"gain_x": "4.2", "invert_x": "true"}}))
+    path.write_text(yaml.safe_dump({"control": {"gain_x": "4.2", "invert_x": "true"}}))
     cfg = AppConfig.load(path)
     assert cfg.control.gain_x == 4.2
     assert cfg.control.invert_x is True

@@ -14,10 +14,10 @@ from app.calibrate.server import (
 from app.config import AppConfig, update_config
 from app.perception.mapping import MappingConfig
 
-
 # --------------------------------------------------------------------- #
 # config merge (update_config)
 # --------------------------------------------------------------------- #
+
 
 def test_update_config_applies_valid_values():
     cfg = AppConfig()
@@ -28,10 +28,13 @@ def test_update_config_applies_valid_values():
 
 def test_update_config_ignores_unknown_and_invalid():
     cfg = AppConfig()
-    update_config(cfg, {
-        "control": {"pinch_threshold": "not-a-number", "nope": 1},
-        "bogus_section": {"x": 1},
-    })
+    update_config(
+        cfg,
+        {
+            "control": {"pinch_threshold": "not-a-number", "nope": 1},
+            "bogus_section": {"x": 1},
+        },
+    )
     assert cfg.control.pinch_threshold == 0.06  # invalid -> default kept
     assert not hasattr(cfg.control, "nope")  # unknown field never set
 
@@ -46,10 +49,12 @@ def test_update_config_coerces_bool():
 # live apply
 # --------------------------------------------------------------------- #
 
+
 class _FakeMapper:
     def __init__(self):
-        self.config = MappingConfig(screen=(0, 0, 1000, 800),
-                                    monitors=[(0, 0, 1000, 800)])
+        self.config = MappingConfig(
+            screen=(0, 0, 1000, 800), monitors=[(0, 0, 1000, 800)]
+        )
 
 
 class _FakePipe:
@@ -78,12 +83,14 @@ def test_camera_change_reports_restart_required():
 # HTTP API
 # --------------------------------------------------------------------- #
 
+
 def _start(tmp_path: Path, pipeline=None):
     server = CalibrationServer(
         config=AppConfig(),
         live_pipeline=pipeline,
         server_config=CalibrationConfig(host="127.0.0.1", port=0),
-        save_path=tmp_path / "jarvis.yaml")
+        save_path=tmp_path / "jarvis.yaml",
+    )
     assert server.start()
     return server
 
@@ -108,7 +115,8 @@ def _post(server, path: str, payload: dict):
         f"http://127.0.0.1:{port}{path}",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
-        method="POST")
+        method="POST",
+    )
     try:
         with urllib.request.urlopen(req) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8"))
@@ -131,8 +139,7 @@ def test_config_endpoint_returns_sections(tmp_path):
 def test_post_config_saves_yaml_and_applies_live(tmp_path):
     server = _start(tmp_path, pipeline=_FakePipe())
     try:
-        status, data = _post(server, "/api/config",
-                             {"control": {"gain_x": 4.5}})
+        status, data = _post(server, "/api/config", {"control": {"gain_x": 4.5}})
         assert status == 200
         assert data["restart_required"] == []
         assert data["config"]["control"]["gain_x"] == 4.5
@@ -145,8 +152,7 @@ def test_post_config_saves_yaml_and_applies_live(tmp_path):
 def test_post_config_reports_restart_for_camera(tmp_path):
     server = _start(tmp_path)
     try:
-        _, data = _post(server, "/api/config",
-                        {"perception": {"camera_index": 1}})
+        _, data = _post(server, "/api/config", {"perception": {"camera_index": 1}})
         assert data["restart_required"] == ["camera_index"]
     finally:
         server.stop()
@@ -194,8 +200,9 @@ PTS = [(0.05, 0.05), (0.95, 0.05), (0.95, 0.95), (0.05, 0.95)]
 
 class _CalibMapper:
     def __init__(self):
-        self.config = MappingConfig(screen=(0, 0, 1000, 800),
-                                    monitors=[(0, 0, 1000, 800)])
+        self.config = MappingConfig(
+            screen=(0, 0, 1000, 800), monitors=[(0, 0, 1000, 800)]
+        )
 
 
 class _CalibPipe:
@@ -230,8 +237,7 @@ def test_calibration_api_full_flow(tmp_path):
         assert pipe._calibration_armed
 
         for nx, ny in PTS:
-            _, data = _post(server, "/api/calibration/capture",
-                            {"nx": nx, "ny": ny})
+            _, data = _post(server, "/api/calibration/capture", {"nx": nx, "ny": ny})
         assert not data["active"] and data["valid"]
         assert not data["armed"] and not pipe._calibration_armed
         saved = (tmp_path / "jarvis.yaml").read_text(encoding="utf-8")

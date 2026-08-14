@@ -33,12 +33,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
 
-from ..config import AppConfig, CONFIG_FILE, update_config
+from ..config import CONFIG_FILE, AppConfig, update_config
 from .session import CalibrationController
 
 logger = logging.getLogger(__name__)
 
-CALIBRATE_HTML = Path(__file__).resolve().parent.parent.parent / "hud" / "calibrate.html"
+CALIBRATE_HTML = (
+    Path(__file__).resolve().parent.parent.parent / "hud" / "calibrate.html"
+)
 
 
 @dataclass
@@ -50,15 +52,18 @@ class CalibrationConfig:
 class CalibrationServer:
     """Expose the config API + calibration page on a local HTTP port."""
 
-    def __init__(self, config: AppConfig, live_pipeline: Optional[object] = None,
-                 server_config: Optional[CalibrationConfig] = None,
-                 save_path: Optional[Path | str] = None):
+    def __init__(
+        self,
+        config: AppConfig,
+        live_pipeline: object | None = None,
+        server_config: CalibrationConfig | None = None,
+        save_path: Path | str | None = None,
+    ):
         self.config = config
         self.pipeline = live_pipeline
         self._cfg = server_config or CalibrationConfig()
         self._save_path = Path(save_path) if save_path else CONFIG_FILE
-        self._controller = CalibrationController(config, live_pipeline,
-                                                 self._save_path)
+        self._controller = CalibrationController(config, live_pipeline, self._save_path)
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
@@ -75,10 +80,12 @@ class CalibrationServer:
 
         def _serve() -> None:
             try:
-                handler = _make_handler(self.config, self.pipeline,
-                                        self._save_path, self._controller)
+                handler = _make_handler(
+                    self.config, self.pipeline, self._save_path, self._controller
+                )
                 self._httpd = ThreadingHTTPServer(
-                    (self._cfg.host, self._cfg.port), handler)
+                    (self._cfg.host, self._cfg.port), handler
+                )
                 self._ready.set()
                 self._httpd.serve_forever()
             except Exception as exc:  # pragma: no cover - bind errors
@@ -93,8 +100,7 @@ class CalibrationServer:
         if self._error is not None:
             logger.warning("calibration server failed to start: %s", self._error)
             return False
-        logger.info("calibration UI on http://%s:%s",
-                    self._cfg.host, self._cfg.port)
+        logger.info("calibration UI on http://%s:%s", self._cfg.host, self._cfg.port)
         return True
 
     def stop(self) -> None:
@@ -107,13 +113,13 @@ class CalibrationServer:
         self._httpd = None
 
 
-def _make_handler(config: AppConfig, pipeline: Optional[object],
-                  save_path: Path, controller=None):
+def _make_handler(
+    config: AppConfig, pipeline: object | None, save_path: Path, controller=None
+):
     """Build a request handler bound to this server's config + pipeline."""
     import urllib.parse
 
-    controller = controller or CalibrationController(config, pipeline,
-                                                     save_path)
+    controller = controller or CalibrationController(config, pipeline, save_path)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # quiet the default stderr spam
@@ -151,10 +157,13 @@ def _make_handler(config: AppConfig, pipeline: Optional[object],
                 self._send_json(200, {"config": config.to_dict()})
             elif path == "/api/monitors":
                 layout = _monitor_layout(pipeline)
-                self._send_json(200, {
-                    "monitors": layout["monitors"],
-                    "screen": layout["screen"],
-                })
+                self._send_json(
+                    200,
+                    {
+                        "monitors": layout["monitors"],
+                        "screen": layout["screen"],
+                    },
+                )
             elif path == "/api/spatial":
                 self._send_json(200, _spatial_status(config, pipeline))
             elif path == "/api/calibration":
@@ -171,13 +180,19 @@ def _make_handler(config: AppConfig, pipeline: Optional[object],
                 payload = self._read_json_body()
                 restart_required = apply_config_update(config, pipeline, payload)
                 config.save(save_path)
-                self._send_json(200, {
-                    "config": config.to_dict(),
-                    "restart_required": restart_required,
-                })
+                self._send_json(
+                    200,
+                    {
+                        "config": config.to_dict(),
+                        "restart_required": restart_required,
+                    },
+                )
                 return
-            if path in ("/api/calibration/start", "/api/calibration/reset",
-                        "/api/calibration/clear"):
+            if path in (
+                "/api/calibration/start",
+                "/api/calibration/reset",
+                "/api/calibration/clear",
+            ):
                 if path.endswith("/start"):
                     result = controller.start()
                 elif path.endswith("/reset"):
@@ -200,7 +215,7 @@ def _make_handler(config: AppConfig, pipeline: Optional[object],
     return Handler
 
 
-def _monitor_layout(pipeline: Optional[object]) -> dict[str, Any]:
+def _monitor_layout(pipeline: object | None) -> dict[str, Any]:
     """Per-monitor rects + virtual desktop union for the calibration page."""
     from ..perception.mapping import detect_monitors, detect_screen
 
@@ -208,15 +223,18 @@ def _monitor_layout(pipeline: Optional[object]) -> dict[str, Any]:
     if mapper is not None and mapper.config.screen is not None:
         screen_cfg = mapper.config.screen
         monitors = mapper.config.monitors or detect_monitors()
-        screen = (list(screen_cfg) if all(v is not None for v in screen_cfg)
-                  else list(detect_screen()))
+        screen = (
+            list(screen_cfg)
+            if all(v is not None for v in screen_cfg)
+            else list(detect_screen())
+        )
     else:
         monitors = detect_monitors()
         screen = list(detect_screen())
     return {"monitors": [list(m) for m in monitors], "screen": screen}
 
 
-def _spatial_status(config: AppConfig, pipeline: Optional[object]) -> dict[str, Any]:
+def _spatial_status(config: AppConfig, pipeline: object | None) -> dict[str, Any]:
     """Spatial-awareness status for the calibration page (Phase 2).
 
     Mirrors config + live mapper state: whether a homography calibration is
@@ -231,7 +249,11 @@ def _spatial_status(config: AppConfig, pipeline: Optional[object]) -> dict[str, 
     mapper = getattr(pipeline, "mapper", None)
     if mapper is not None and mapper.config.screen is not None:
         monitors = mapper.config.monitors or detect_monitors()
-        screen = tuple(mapper.config.screen) if all(v is not None for v in mapper.config.screen) else detect_screen()
+        screen = (
+            tuple(mapper.config.screen)
+            if all(v is not None for v in mapper.config.screen)
+            else detect_screen()
+        )
         active = mapper.config.active_monitor
     else:
         monitors = detect_monitors()
@@ -253,8 +275,10 @@ def _spatial_status(config: AppConfig, pipeline: Optional[object]) -> dict[str, 
         "monitors": [list(m) for m in monitors],
         "active_monitor": active,
         "active_monitor_zone": (
-            f"monitor_{active}" if active is not None and 0 <= active < len(monitors)
-            else None),
+            f"monitor_{active}"
+            if active is not None and 0 <= active < len(monitors)
+            else None
+        ),
         "calibration": calibration,
         "calibration_valid": is_valid_homography(calibration),
         "modifier": {
@@ -267,8 +291,9 @@ def _spatial_status(config: AppConfig, pipeline: Optional[object]) -> dict[str, 
     }
 
 
-def apply_config_update(cfg: AppConfig, pipeline: Optional[object],
-                        payload: dict[str, Any]) -> list[str]:
+def apply_config_update(
+    cfg: AppConfig, pipeline: object | None, payload: dict[str, Any]
+) -> list[str]:
     """Merge ``payload`` into ``cfg``, apply live where possible.
 
     Returns the list of changed settings that need an app restart (only

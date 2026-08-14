@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from .modes import Mode, ModeMachine, _TRANSITIONS
+from .modes import _TRANSITIONS, Mode, ModeMachine
 
 # Phrase substrings -> target mode. Ordered so longer/overlapping phrases win.
 PHRASE_TARGETS: tuple[tuple[str, Mode], ...] = (
@@ -42,10 +42,10 @@ _MODE_REPLY = {
     Mode.PRESENTATION: "Presentation mode.",
 }
 
-_ADJACENCY: Optional[dict[Mode, list[tuple[str, Mode]]]] = None
+_ADJACENCY: dict[Mode, list[tuple[str, Mode]]] | None = None
 
 
-def parse_mode_command(command: str) -> Optional[Mode]:
+def parse_mode_command(command: str) -> Mode | None:
     """Return the target mode for a voice command, or None if not one."""
     low = command.lower()
     for phrase, target in PHRASE_TARGETS:
@@ -69,7 +69,7 @@ def route_to(modes: ModeMachine, target: Mode) -> Mode:
     return modes.mode
 
 
-def handle_mode_command(command: str, modes: ModeMachine) -> Optional[str]:
+def handle_mode_command(command: str, modes: ModeMachine) -> str | None:
     """Handle a mode-switch phrase. Returns a TTS reply, or None if not one."""
     target = parse_mode_command(command)
     if target is None:
@@ -82,6 +82,7 @@ def handle_mode_command(command: str, modes: ModeMachine) -> Optional[str]:
 # BFS over the transition table
 # --------------------------------------------------------------------- #
 
+
 def _adjacency() -> dict[Mode, list[tuple[str, Mode]]]:
     global _ADJACENCY
     if _ADJACENCY is None:
@@ -92,7 +93,7 @@ def _adjacency() -> dict[Mode, list[tuple[str, Mode]]]:
     return _ADJACENCY
 
 
-def _shortest_path(source: Mode, target: Mode) -> Optional[list[str]]:
+def _shortest_path(source: Mode, target: Mode) -> list[str] | None:
     """BFS: the list of triggers that take ``source`` to ``target``."""
     if source is target:
         return []
@@ -112,8 +113,9 @@ def _shortest_path(source: Mode, target: Mode) -> Optional[list[str]]:
     return None
 
 
-def _reconstruct(prev: dict[Mode, tuple[Mode, str]], source: Mode,
-                 target: Mode) -> list[str]:
+def _reconstruct(
+    prev: dict[Mode, tuple[Mode, str]], source: Mode, target: Mode
+) -> list[str]:
     triggers: list[str] = []
     cur = target
     while cur is not source:

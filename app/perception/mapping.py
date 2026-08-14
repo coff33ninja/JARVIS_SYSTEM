@@ -32,8 +32,12 @@ _SM_CXVIRTUAL = 78
 _SM_CYVIRTUAL = 79
 
 _MonitorEnumProc = ctypes.WINFUNCTYPE(
-    ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong,
-    ctypes.POINTER(ctypes.c_long * 4), ctypes.c_double)
+    ctypes.c_int,
+    ctypes.c_ulong,
+    ctypes.c_ulong,
+    ctypes.POINTER(ctypes.c_long * 4),
+    ctypes.c_double,
+)
 
 
 def _windows_virtual_screen() -> ScreenRect | None:
@@ -71,10 +75,9 @@ def detect_monitors() -> list[ScreenRect]:
     try:
         user32 = ctypes.windll.user32
 
-        def _cb(_hmon, _hdc, rect, _lparam) -> int:  # noqa: ANN001
+        def _cb(_hmon, _hdc, rect, _lparam) -> int:
             r = rect.contents
-            rects.append((int(r[0]), int(r[1]),
-                          int(r[2] - r[0]), int(r[3] - r[1])))
+            rects.append((int(r[0]), int(r[1]), int(r[2] - r[0]), int(r[3] - r[1])))
             return 1
 
         proc = _MonitorEnumProc(_cb)
@@ -119,14 +122,13 @@ class MappingConfig:
     active_monitor: int | None = None
 
     @classmethod
-    def from_control(cls, cfg, screen: ScreenRect | None = None) -> "MappingConfig":
+    def from_control(cls, cfg, screen: ScreenRect | None = None) -> MappingConfig:
         return cls(
             gain_x=cfg.gain_x,
             gain_y=cfg.gain_y,
             invert_x=cfg.invert_x,
             invert_y=cfg.invert_y,
-            screen=screen or (cfg.screen_x, cfg.screen_y,
-                              cfg.screen_w, cfg.screen_h),
+            screen=screen or (cfg.screen_x, cfg.screen_y, cfg.screen_w, cfg.screen_h),
             calibration=cfg.calibration,
             active_monitor=cfg.active_monitor,
         )
@@ -179,8 +181,9 @@ class CursorMapper:
         """
         x, y, w, h = self.active_screen
         if w <= 0 or h <= 0:
-            logger.warning("screen rect is degenerate (%r); skipping move",
-                           self.active_screen)
+            logger.warning(
+                "screen rect is degenerate (%r); skipping move", self.active_screen
+            )
             return (x + w // 2, y + h // 2)
 
         if is_valid_homography(self.config.calibration):

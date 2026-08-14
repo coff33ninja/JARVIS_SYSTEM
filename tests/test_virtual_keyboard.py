@@ -29,16 +29,16 @@ def test_press():
 
 
 def test_osk_unavailable_off_windows(monkeypatch):
-    monkeypatch.setattr("app.control.virtual_keyboard.platform.system",
-                        lambda: "Linux")
+    monkeypatch.setattr("app.control.virtual_keyboard.platform.system", lambda: "Linux")
     v = VirtualKeyboard()
     assert v.osk_available is False
     assert v.toggle_osk() is False
 
 
 def test_osk_toggle_show_and_hide(monkeypatch):
-    monkeypatch.setattr("app.control.virtual_keyboard.platform.system",
-                        lambda: "Windows")
+    monkeypatch.setattr(
+        "app.control.virtual_keyboard.platform.system", lambda: "Windows"
+    )
     monkeypatch.setattr("app.control.virtual_keyboard.OSK", "osk.exe")
 
     calls = {"list": [], "kill": [], "popen": []}
@@ -50,10 +50,11 @@ def test_osk_toggle_show_and_hide(monkeypatch):
             calls["list"].append(1)
         return Mock(stdout="osk.exe")
 
-    monkeypatch.setattr("app.control.virtual_keyboard.subprocess.run",
-                        fake_run)
-    monkeypatch.setattr("app.control.virtual_keyboard.subprocess.Popen",
-                        lambda *a, **kw: calls["popen"].append(1))
+    monkeypatch.setattr("app.control.virtual_keyboard.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "app.control.virtual_keyboard.subprocess.Popen",
+        lambda *a, **kw: calls["popen"].append(1),
+    )
 
     v = VirtualKeyboard()
     # Running -> toggle hides it.
@@ -61,8 +62,10 @@ def test_osk_toggle_show_and_hide(monkeypatch):
     assert v.toggle_osk() is False
     assert calls["kill"]
     # Not running -> toggle shows it.
-    monkeypatch.setattr("app.control.virtual_keyboard.subprocess.run",
-                        lambda argv, *a, **kw: Mock(stdout="nothing"))
+    monkeypatch.setattr(
+        "app.control.virtual_keyboard.subprocess.run",
+        lambda argv, *a, **kw: Mock(stdout="nothing"),
+    )
     assert v.osk_running() is False
     assert v.toggle_osk() is True
     assert calls["popen"]
