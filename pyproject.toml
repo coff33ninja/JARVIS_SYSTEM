@@ -49,6 +49,30 @@ known-first-party = ["app", "tests", "scripts"]
 [tool.black]
 line-length = 88
 
+[tool.bandit]
+# False positives / deliberate patterns (see docs/06_DECISIONS.md):
+#   B101 - assert in tests (pytest idiom) and type-narrowing asserts in code
+#   B311 - random in tests (test-data generation, not security)
+#   B110 - silent try/except:pass for optional-feature fallbacks
+#   B310 - urlopen only against trusted/local endpoints (Ollama base_url,
+#          fixed model URL, localhost test servers)
+#   B404 - subprocess module usage is intentional in the control/agent layers
+#   B603 - subprocess calls pass only static literals or config values
+#   B606 - informational: processes launched without a shell (by design)
+#   B607 - system utilities resolved through PATH (tasklist/taskkill/osk)
+#   B608 - SQL f-strings interpolate only whitelist-validated table/col names
+skips = [
+    "B101",
+    "B110",
+    "B310",
+    "B311",
+    "B404",
+    "B603",
+    "B606",
+    "B607",
+    "B608",
+]
+
 [tool.uv]
 # This is an application, not a distributable package.
 package = false

@@ -20,9 +20,7 @@ from . import Tool, ToolRegistry
 
 def _open_app(target: str) -> str:
     try:
-        subprocess.Popen(
-            f'start "" "{target}"', shell=True, cwd=os.path.expanduser("~")
-        )
+        subprocess.Popen([target], cwd=os.path.expanduser("~"))
         return f"launched: {target}"
     except Exception as exc:
         return f"open_app failed: {exc}"
