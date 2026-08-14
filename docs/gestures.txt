@@ -1,0 +1,103 @@
+JARVIS_SYSTEM — Hand Gesture Reference
+
+This file lists gestures detected and acted on by the codebase, how they are
+classified, and the primary actions they map to.
+
+Source files: app/perception/geometry.py, app/perception/pipeline.py,
+app/perception/mapping.py, app/control/registry.py, config/jarvis.yaml
+
+Gestures:
+
+- point
+  - classification: index finger extended (HandPose.index_extended)
+  - detection: `classify()` -> HandPose.name == "point"
+  - action: cursor movement (smoothed via 1-Euro filter) + swipe detection
+  - files: geometry.py (point_position), pipeline.py (_dispatch, _move_cursor)
+
+- pinch
+  - classification: thumb-index tip distance < `pinch_threshold` and index extended
+  - detection: `pinch_ratio(...) < cfg.pinch_threshold` (HandPose.pinch)
+  - action: left click (edge-trigger), cursor reposition then click
+  - files: geometry.py (pinch_ratio), pipeline.py (_pinch)
+
+- two_finger_pinch
+  - classification: thumb-middle tip distance < `two_finger_pinch_threshold`
+  - detection: `two_pinch_ratio < cfg.two_finger_pinch_threshold`
+  - action: right click (edge-trigger)
+  - files: geometry.py, pipeline.py (_two_finger_pinch)
+
+- two_hand_pinch (two-hand pinch)
+  - classification: both hands pinching simultaneously (detected in pipeline)
+  - action: two-hand zoom ticks (Ctrl+/-) while both hands pinch and move apart/together
+  - files: pipeline.py (_two_hand_zoom)
+
+- fist
+  - classification: no four non-thumb fingers extended
+  - detection: HandPose.fist
+  - action: drag start on initial fist, drag end on release; also used to open menu (modifier hand)
+  - files: geometry.py, pipeline.py (_fist, _menu_frame/_fist_trigger)
+
+- v_sign
+  - classification: index + middle extended, ring/pinky not extended
+  - detection: HandPose.v_sign
+  - action: scroll (vertical motion -> scroll ticks) or slide navigation in presentation mode
+  - files: geometry.py, pipeline.py (_scroll)
+
+- thumbs_up / thumbs_down
+  - classification: thumb extended, other four fingers curled; orientation by thumb tip vs MCP y coordinate
+  - detection: HandPose.thumbs_up / HandPose.thumbs_down
+  - action: confirm (thumbs_up) and cancel (thumbs_down) within chat mode
+  - files: geometry.py, pipeline.py (_dispatch)
+
+- open_palm
+  - classification: index, middle, ring, pinky all extended
+  - detection: HandPose.open_palm
+  - action: mode-dependent — in TRANSFER mode: "catch"; in CHAT mode: "release"; also menu cancel when modifier
+  - files: geometry.py, pipeline.py (_dispatch, _menu_frame)
+
+- circle (index-trace)
+  - classification: index tip trajectory forms a closed circular trace (is_circle_trace)
+  - detection: trace of index_tip samples -> is_circle_trace threshold
+  - action: attention gesture ("Jarvis" attention callback)
+  - files: geometry.py (is_circle_trace), pipeline.py (_circle)
+
+- spread (two-hand spread)
+  - classification: normalized distance between palm centers >= `two_hand_spread_threshold`
+  - detection: two_hand_spread(...) >= threshold
+  - action: toggle into TRANSFER mode (arms when held for `hold_frames`), suppresses other open-palm semantics while active
+  - files: geometry.py (two_hand_spread), pipeline.py (_spread)
+
+- swipe (point lateral sweep)
+  - classification: fast lateral motion accumulation past `swipe_threshold_px` with cooldown
+  - action: left/right swipe -> Alt+Tab / Alt+Shift+Tab (window switching) or presentation slide nav
+  - files: pipeline.py (_swipe)
+
+- modifier hand behaviors (secondary hand)
+  - finger-count selection: extended finger count (1-4) selects a monitor directly (edge-trigger after hold_frames), full open palm (5) selects monitor 5 only while primary points
+  - passive lateral zone: left/center/right lateral band of secondary hand held for `zone_hold_ms` selects adjacent monitor
+  - fist hold: opens radial HUD menu (menu_hold_ms) — menu interactions: pointing + pinch to confirm, open_palm to cancel
+  - files: pipeline.py (_modifier_hand, _finger_count_select, _passive_zone_select, _menu_frame)
+
+Config / thresholds (default locations)
+- `config/jarvis.yaml` control section contains thresholds referenced by geometry/pipeline:
+  - pinch_threshold
+  - two_finger_pinch_threshold
+  - two_hand_spread_threshold
+  - two_hand_zoom_threshold
+  - scroll_threshold
+  - hold_frames, menu_hold_ms, menu_timeout_ms
+  - swipe_threshold_px, swipe_cooldown_ms
+  - zone_hold_ms
+
+Notes
+- Gesture precedence is encoded in `classify()` (geometry.py):
+  thumbs_down > thumbs_up > fist > pinch > two_finger_pinch > open_palm > v_sign > point
+- Many pipeline actions are edge-triggered (only on gesture onset). Hold/debounce handled via `hold_frames`.
+- The gesture registry (`app/control/registry.py`) seeds bindings that mirror the pipeline's hardcoded mapping so the registry can be used to rebind at runtime.
+
+If you want, I can:
+- convert pipeline dispatch to use `GestureRegistry.resolve()` instead of hardcoded names,
+- add this file to the HUD or docs page,
+- or expand each gesture entry with exact line references for unit tests.
+
+Generated automatically from code inspection on 2026-08-14.
