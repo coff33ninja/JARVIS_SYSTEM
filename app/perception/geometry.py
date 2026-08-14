@@ -153,6 +153,83 @@ def point_position(lmks: Landmarks) -> tuple[float, float]:
     return (max(0.0, min(1.0, lm[0])), max(0.0, min(1.0, lm[1])))
 
 
+# --------------------------------------------------------------------------- #
+# Circle / index-trace detection ("Jarvis" attention)
+#
+# A trajectory of normalized index-tip positions forms a circle when it stays
+# roughly square in its bounding box, closes its loop, and sweeps a consistent
+# angular path around its centroid. Pure math over (x, y) samples, so the
+# detector is unit-testable without MediaPipe or a webcam.
+# --------------------------------------------------------------------------- #
+
+TracePoint = tuple[float, float]
+
+
+def trace_signed_angle(points: list[TracePoint]) -> float:
+    """Signed angular sweep (radians) of a 2D trajectory around its centroid.
+
+    Consecutive centroid vectors are rotated and their wrapped angle deltas
+    (normalized to (-pi, pi]) summed, so a tip circling the centroid
+    accumulates ``|total| -> 2*pi`` while a back-and-forth wiggle cancels
+    toward zero.
+    """
+    if len(points) < 2:
+        return 0.0
+    cx = sum(p[0] for p in points) / len(points)
+    cy = sum(p[1] for p in points) / len(points)
+
+    def _angle(p: TracePoint) -> float:
+        return math.atan2(p[1] - cy, p[0] - cx)
+
+    total = 0.0
+    prev = _angle(points[0])
+    for p in points[1:]:
+        cur = _angle(p)
+        delta = cur - prev
+        while delta > math.pi:
+            delta -= 2.0 * math.pi
+        while delta < -math.pi:
+            delta += 2.0 * math.pi
+        total += delta
+        prev = cur
+    return total
+
+
+def trace_bbox(points: list[TracePoint]) -> tuple[float, float, float, float]:
+    """Bounding box ``(x0, y0, x1, y1)`` of a 2D trajectory."""
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def is_circle_trace(points: list[TracePoint],
+                    min_samples: int = 8,
+                    min_sweep: float = 4.5,
+                    max_aspect: float = 0.6,
+                    endpoint_tol: float = 0.4) -> bool:
+    """True when ``points`` (normalized index-tip trajectory) draws a circle.
+
+    A circle requires: enough samples, a roughly square bounding box (a fast
+    lateral swipe is a thin line and rejected), a closed loop (start near
+    end), and a consistent angular sweep of at least ``min_sweep`` radians.
+    Direction-agnostic: clockwise and counter-clockwise both count.
+    """
+    if len(points) < min_samples:
+        return False
+    x0, y0, x1, y1 = trace_bbox(points)
+    w, h = x1 - x0, y1 - y0
+    diag = math.hypot(w, h)
+    if diag < 1e-6:
+        return False
+    aspect = min(w, h) / max(w, h) if w and h else 0.0
+    if aspect < max_aspect:
+        return False
+    if math.hypot(points[0][0] - points[-1][0],
+                  points[0][1] - points[-1][1]) > endpoint_tol * diag:
+        return False
+    return abs(trace_signed_angle(points)) >= min_sweep
+
+
 def classify(lmks: Landmarks, cfg: GeometryConfig | None = None) -> HandPose:
     """Classify a 21-landmark hand into a gesture-usable HandPose.
 

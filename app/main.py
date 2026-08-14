@@ -45,13 +45,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
-def build_pipeline(args: argparse.Namespace, cfg: AppConfig) -> ControlPipeline:
+def build_pipeline(args: argparse.Namespace, cfg: AppConfig,
+                   on_attention=None) -> ControlPipeline:
     hud = None
     if not args.no_hud and cfg.hud.enabled:
         server = HUDServer(HUDConfig(host=cfg.hud.host, port=cfg.hud.port))
         if server.start():
             hud = server
-    return ControlPipeline(config=cfg, hud=hud)
+    return ControlPipeline(config=cfg, hud=hud, on_attention=on_attention)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,7 +62,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.smoke:
         return _smoke(cfg)
 
-    pipeline = build_pipeline(args, cfg)
+    pipeline = build_pipeline(
+        args, cfg,
+        on_attention=lambda: logger.info("attention: 'Jarvis' circle gesture"),
+    )
     calibrate = None
     if not args.no_hud and cfg.hud.enabled:
         calibrate = CalibrationServer(
@@ -81,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Pinch = click, two-finger pinch = right click, "
                 "fist = drag, V-sign = scroll, swipe = next/prev window. "
                 "Two-hand spread = Transfer mode. "
+                "Circle (index trace) = attention 'Jarvis'. "
                 "F2 = idle/control toggle, F3 = presentation mode, "
                 "F4 = on-screen keyboard. "
                 "F5/F6/F7 = play-pause/next/previous, F8 mute, "

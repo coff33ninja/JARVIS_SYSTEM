@@ -18,7 +18,7 @@ from ..control.modes import Mode, ModeMachine
 from ..control.virtual_mouse import VirtualMouse
 from ..hud.events import MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
 from .camera import Camera
-from .geometry import classify, two_hand_spread
+from .geometry import classify, is_circle_trace, two_hand_spread
 from .hand_tracker import HandLandmarkerTracker
 from .mapping import CursorMapper, MappingConfig
 
@@ -66,6 +66,7 @@ class ControlPipeline:
         hud: Optional[object] = None,
         modes: Optional[ModeMachine] = None,
         frame_source: Optional[Callable[[], object]] = None,
+        on_attention: Optional[Callable[[], None]] = None,
     ):
         self.config = config or AppConfig()
         self.camera = camera or Camera(self.config.perception.camera_index,
@@ -83,6 +84,7 @@ class ControlPipeline:
         self.hud = hud
         self.modes = modes or ModeMachine()
         self.frame_source = frame_source
+        self.on_attention = on_attention or (lambda: None)
 
         self.stats = PipelineStats()
         self._smoothing = None  # built lazily to keep imports light
@@ -98,6 +100,8 @@ class ControlPipeline:
         self._dragging = False
         self._last_gesture = ""
         self._gesture_frames = 0
+        self._trace: list[tuple[float, float]] = []
+        self._trace_last = 0.0
         self._v_sign_active = False
         self._prev_scroll_y = 0.5
         self._scroll_accum = 0.0
@@ -154,7 +158,12 @@ class ControlPipeline:
         self._two_hand_zoom(result, actions)
         pose = classify(lmks)
         self._emit(result, pose)
-        actions.extend(self._dispatch(pose))
+        # Misfire guard: with both hands up in a resting pose (e.g. a two-hand
+        # spread), the spread handler owns the frame — don't also let the
+        # primary open palm fire catch/release.
+        if not self._rest_pose(result, pose):
+            actions.extend(self._dispatch(pose))
+        actions.extend(self._circle(pose))
         return actions
 
     # ------------------------------------------------------------------ #
@@ -238,6 +247,55 @@ class ControlPipeline:
                 self._zoom_accum += threshold
 
     # ------------------------------------------------------------------ #
+    # misfire guards + attention gesture
+    # ------------------------------------------------------------------ #
+
+    def _rest_pose(self, result, pose) -> bool:
+        """True when both hands are up in a resting / non-deliberate pose.
+
+        Two open palms (or an open palm beside an unclassified hand) read as
+        the two-hand spread / rest posture; the spread handler owns it, so a
+        spread frame must not also fire catch/release from the primary open
+        palm. A deliberate single-hand open palm still acts.
+        """
+        hands = result.hands or []
+        if len(hands) < 2 or pose.name not in ("open_palm", "none"):
+            return False
+        return classify(hands[1]).name in ("open_palm", "none")
+
+    def _circle(self, pose) -> list[PipelineAction]:
+        """Index-trace circle -> attention ("Jarvis"). Works in any mode.
+
+        Accumulates the index tip while the hand is in a trace pose (index
+        extended, not pinching, not an open palm) and fires once when the
+        recent trajectory closes into a circular sweep (04_GESTURE_VOCABULARY
+        "Circle / index trace"). Cooldown suppresses repeat triggers.
+        """
+        cfg = self.config.control
+        now = time.monotonic()
+        if pose.index_extended and not pose.pinch and not pose.open_palm:
+            self._trace.append(pose.index_xy)
+            if len(self._trace) > cfg.circle_max_samples:
+                self._trace = self._trace[-cfg.circle_max_samples:]
+        else:
+            self._trace = []
+        if len(self._trace) < cfg.circle_min_samples:
+            return []
+        if now - self._trace_last < cfg.circle_cooldown_ms / 1000.0:
+            return []
+        if not is_circle_trace(
+                self._trace,
+                min_samples=cfg.circle_min_samples,
+                min_sweep=cfg.circle_min_sweep,
+                max_aspect=cfg.circle_max_aspect,
+                endpoint_tol=cfg.circle_endpoint_tol):
+            return []
+        self._trace = []
+        self._trace_last = now
+        self.on_attention()
+        return [PipelineAction("attention", gesture="circle")]
+
+    # ------------------------------------------------------------------ #
     # gesture dispatch
     # ------------------------------------------------------------------ #
 
@@ -263,6 +321,12 @@ class ControlPipeline:
             self._prev_thumbs_down = False
         if gesture != "open_palm":
             self._prev_open_palm = False
+        # Same re-arm for the pinch clicks: leaving the pinch (even briefly)
+        # must re-arm it so the next pinch clicks again.
+        if gesture != "pinch":
+            self._prev_pinch = False
+        if gesture != "two_finger_pinch":
+            self._prev_two_pinch = False
 
         # Leaving "fist" releases an active drag (fist = hold, release = drop).
         if self._dragging and gesture != "fist":
@@ -316,6 +380,10 @@ class ControlPipeline:
             self._prev_thumbs_down = False
         if gesture != "open_palm":
             self._prev_open_palm = False
+        if gesture != "pinch":
+            self._prev_pinch = False
+        if gesture != "two_finger_pinch":
+            self._prev_two_pinch = False
 
     def _hold_stable(self, gesture: str) -> bool:
         if gesture == self._last_gesture:
@@ -448,6 +516,8 @@ class ControlPipeline:
         self._zoom_accum = 0.0
         self._last_gesture = None
         self._gesture_frames = 0
+        self._trace = []
+        self._trace_last = 0.0
         self._v_sign_active = False
         self._scroll_accum = 0.0
         self._prev_scroll_y = 0.5

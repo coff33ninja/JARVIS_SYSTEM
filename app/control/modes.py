@@ -39,10 +39,12 @@ _TRANSITIONS: dict[tuple[Mode, str], Mode] = {
     (Mode.PRESENTATION, PRESENT_GESTURE): Mode.CONTROL,
 }
 
-# Every gesture the system can classify.
+# Every gesture the system can classify. "circle" is a trajectory gesture
+# (index-trace attention) gated separately from mode posture — it acts in any
+# mode, so it does not appear in the per-mode _ACTIVE table.
 GESTURES = {
     "point", "pinch", "two_finger_pinch", "fist",
-    "v_sign", "open_palm", "thumbs_up", "thumbs_down", "none",
+    "v_sign", "open_palm", "thumbs_up", "thumbs_down", "circle", "none",
 }
 
 # Which gestures act per mode. "none" is always inert.

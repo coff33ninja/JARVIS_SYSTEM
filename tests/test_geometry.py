@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from app.perception.geometry import (
@@ -13,9 +15,12 @@ from app.perception.geometry import (
     distance,
     finger_extended,
     hand_size,
+    is_circle_trace,
     palm_center,
     pinch_ratio,
     point_position,
+    trace_bbox,
+    trace_signed_angle,
     two_hand_spread,
 )
 from conftest import (
@@ -168,3 +173,73 @@ def test_two_hand_spread_reflects_palm_distance():
 def test_middle_tip_constant_sanity():
     assert MIDDLE_TIP == 12
     assert THUMB_TIP == 4
+
+
+# --------------------------------------------------------------------------- #
+# Circle / index-trace detection ("Jarvis" attention)
+# --------------------------------------------------------------------------- #
+
+def _circle_points(n=24, r=0.2, cx=0.5, cy=0.5):
+    """``n`` points evenly spaced on a circle of radius ``r``."""
+    return [(cx + r * math.cos(2 * math.pi * i / n),
+             cy + r * math.sin(2 * math.pi * i / n)) for i in range(n)]
+
+
+def test_full_circle_trace_detected():
+    assert is_circle_trace(_circle_points()) is True
+
+
+def test_circle_trace_direction_agnostic():
+    assert is_circle_trace(_circle_points()[::-1]) is True
+
+
+def test_trace_signed_angle_accumulates_full_circle():
+    pts = _circle_points()
+    assert abs(trace_signed_angle(pts)) > 2 * math.pi - 0.6  # ~2pi
+    # A path that sweeps out and back along the same arc cancels toward zero.
+    arc = [(0.5 + 0.2 * math.cos(math.radians(a)),
+            0.5 + 0.2 * math.sin(math.radians(a)))
+           for a in (0, 20, 40, 30, 10, 0)]
+    assert abs(trace_signed_angle(arc)) < 0.5
+
+
+def test_trace_bbox_of_circle_is_square():
+    x0, y0, x1, y1 = trace_bbox(_circle_points())
+    assert abs((x1 - x0) - (y1 - y0)) < 1e-9
+
+
+def test_line_sweep_is_not_circle():
+    # A fast lateral swipe is a thin line: rejected on aspect + no sweep.
+    pts = [(0.1 + 0.02 * i, 0.5) for i in range(30)]
+    assert is_circle_trace(pts) is False
+
+
+def test_short_trace_is_not_circle():
+    assert is_circle_trace(_circle_points(n=6)) is False
+
+
+def test_open_arc_is_not_circle():
+    # Half circle: endpoints far apart and sweep only ~pi.
+    pts = [(0.5 + 0.2 * math.cos(math.pi * i / 6),
+            0.5 + 0.2 * math.sin(math.pi * i / 6)) for i in range(7)]
+    assert is_circle_trace(pts) is False
+
+
+def test_open_spiral_is_not_circle():
+    # Full circle but the loop never closes back to its start: the endpoint
+    # is flung diametrically opposite the starting point.
+    pts = _circle_points()
+    pts[-1] = (0.1, 0.5)
+    assert is_circle_trace(pts) is False
+
+
+def test_degenerate_trace_is_not_circle():
+    assert is_circle_trace([]) is False
+    assert is_circle_trace([(0.5, 0.5)] * 12) is False
+
+
+def test_circle_trace_respects_min_sweep():
+    # Same closed square-ish loop: sweep is only ~2pi/4 < 4.5 rad.
+    pts = [(0.5 + 0.2 * math.cos(math.pi / 2 * i),
+            0.5 + 0.2 * math.sin(math.pi / 2 * i)) for i in range(5)]
+    assert is_circle_trace(pts) is False

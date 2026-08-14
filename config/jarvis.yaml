@@ -1,0 +1,41 @@
+perception:
+  camera_index: 0
+  width: 1600
+  height: 900
+  fps: 60
+  max_hands: 2
+  min_hand_confidence: 0.5
+  min_tracking_confidence: 0.5
+  min_presence_confidence: 0.5
+control:
+  gain_x: 3.2
+  gain_y: 3.2
+  invert_x: true
+  invert_y: false
+  min_cutoff: 1.0
+  beta: 0.007
+  d_cutoff: 1.0
+  pinch_threshold: 0.06
+  two_finger_pinch_threshold: 0.06
+  scroll_threshold: 0.02
+  scroll_hold_ms: 150
+  swipe_threshold_px: 250.0
+  swipe_cooldown_ms: 600
+  hold_frames: 2
+  lost_grace_frames: 3
+  preferred_hand: Right
+  two_hand_spread_threshold: 0.4
+  two_hand_zoom_threshold: 0.05
+  failsafe: false
+  screen_x: null
+  screen_y: null
+  screen_w: null
+  screen_h: null
+hud:
+  host: 127.0.0.1
+  port: 8765
+  enabled: true
+  skeleton_interval_s: 0.1
+  status_interval_s: 1.0
+  calibrate_host: 127.0.0.1
+  calibrate_port: 8766

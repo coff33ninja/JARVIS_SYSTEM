@@ -85,6 +85,16 @@ class ControlConfig:
     # change; re-arms when either hand releases the pinch.
     two_hand_zoom_threshold: float = 0.05
 
+    # Circle / index-trace "Jarvis" attention: the pointing index draws a
+    # closed loop (see geometry.is_circle_trace). Fires an "attention" action
+    # in any mode; cooldown prevents rapid re-triggering.
+    circle_min_samples: int = 8        # trajectory samples needed to classify
+    circle_max_samples: int = 30       # recent-trace window kept for detection
+    circle_min_sweep: float = 4.5      # min angular sweep (rad) around centroid
+    circle_max_aspect: float = 0.6     # min bbox aspect ratio (line = ~0)
+    circle_endpoint_tol: float = 0.4   # start/end closure tol (fraction of diag)
+    circle_cooldown_ms: int = 1500     # min time between attention triggers
+
     # PyAutoGUI corner fail-safe. Off for gesture control: corners are
     # legitimate cursor targets and the loop has its own abort (ESC/q).
     failsafe: bool = False

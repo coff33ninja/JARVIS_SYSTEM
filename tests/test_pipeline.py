@@ -663,3 +663,139 @@ def test_presentation_v_sign_navigates_slides():
     pipe.step(FRAME)
     assert any(c[0] == "hotkey" and c[1] == ("pageup",) for c in mouse.calls)
     assert all(c[0] != "scroll" for c in mouse.calls)
+
+
+# --------------------------------------------------------------------------- #
+# Circle / index-trace attention ("Jarvis")
+# --------------------------------------------------------------------------- #
+
+def _circle_steps(n=18, r=0.1):
+    """Frame-by-frame tracker results sweeping the pointing hand in a circle."""
+    import math
+
+    base = point_hand()
+    frames = []
+    for i in range(n):
+        a = 2 * math.pi * i / 16
+        frames.append(hands(_shift(base, r * math.cos(a), r * math.sin(a))))
+    return frames
+
+
+def test_circle_trace_fires_attention():
+    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    called = []
+    pipe.on_attention = lambda: called.append(1)
+    actions = []
+    for result in _circle_steps():
+        tracker.result = result
+        actions.extend(pipe.step(FRAME))
+    attn = [a for a in actions if a.name == "attention"]
+    assert len(attn) == 1
+    assert attn[0].gesture == "circle"
+    assert called == [1]
+
+
+def test_circle_trace_cooldown_prevents_repeat():
+    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    actions = []
+    for _ in range(2):
+        for result in _circle_steps():
+            tracker.result = result
+            actions.extend(pipe.step(FRAME))
+    assert len([a for a in actions if a.name == "attention"]) == 1
+
+
+def test_line_sweep_is_not_attention():
+    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    base = point_hand()
+    actions = []
+    for i in range(24):
+        tracker.result = hands(_shift(base, 0.0, 0.1 * i / 24))
+        actions.extend(pipe.step(FRAME))
+    assert all(a.name != "attention" for a in actions)
+
+
+def test_breaking_pose_resets_trace():
+    """An open palm mid-trace resets the accumulated trajectory."""
+    pipe, mouse, hud, tracker = make_pipeline(hands(point_hand()))
+    actions = []
+    for result in _circle_steps(n=8):  # half a circle, not enough
+        tracker.result = result
+        actions.extend(pipe.step(FRAME))
+    tracker.result = hands(open_hand())  # breaks the trace pose
+    pipe.step(FRAME)
+    for result in _circle_steps():  # second attempt after the break
+        tracker.result = result
+        actions.extend(pipe.step(FRAME))
+    assert len([a for a in actions if a.name == "attention"]) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Misfire guards
+# --------------------------------------------------------------------------- #
+
+def test_pinch_rearms_after_other_gesture():
+    pipe, mouse, hud, tracker = make_pipeline(hands(pinch_hand()))
+    for _ in range(2):
+        pipe.step(FRAME)
+    assert len([c for c in mouse.calls if c[0] == "click"]) == 1
+    tracker.result = hands(point_hand())
+    for _ in range(2):
+        pipe.step(FRAME)
+    tracker.result = hands(pinch_hand())
+    for _ in range(2):
+        pipe.step(FRAME)
+    assert len([c for c in mouse.calls if c[0] == "click"]) == 2
+
+
+def test_two_finger_pinch_rearms_after_other_gesture():
+    pipe, mouse, hud, tracker = make_pipeline(hands(two_pinch_hand()))
+    for _ in range(2):
+        pipe.step(FRAME)
+    assert len([c for c in mouse.calls if c[0] == "right_click"]) == 1
+    tracker.result = hands(point_hand())
+    for _ in range(2):
+        pipe.step(FRAME)
+    tracker.result = hands(two_pinch_hand())
+    for _ in range(2):
+        pipe.step(FRAME)
+    assert len([c for c in mouse.calls if c[0] == "right_click"]) == 2
+
+
+def test_spread_frame_does_not_fire_catch():
+    """Two open palms = spread/rest: mode toggles, catch is suppressed."""
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = _spread_result()
+    actions = []
+    for _ in range(pipe.config.control.hold_frames + 1):
+        actions.extend(pipe.step(FRAME))
+    assert pipe.modes.mode == Mode.TRANSFER
+    assert all(a.name != "catch" for a in actions)
+
+
+def test_two_hand_rest_suppresses_open_palm_in_chat():
+    """Both hands up relaxed in Chat must not fire 'release'."""
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CHAT)
+    tracker.result = two_hands(_shift(open_hand(), 0.15, 0.0),
+                               _shift(open_hand(), -0.15, 0.0))
+    actions = []
+    for _ in range(4):
+        actions.extend(pipe.step(FRAME))
+    assert all(a.name != "release" for a in actions)
+    # A single open palm still releases.
+    tracker.result = hands(open_hand())
+    actions = []
+    for _ in range(2):
+        actions.extend(pipe.step(FRAME))
+    assert any(a.name == "release" for a in actions)
+
+
+def test_two_hand_deliberate_primary_still_acts():
+    """Rest-pose suppression only kicks in for rest; a deliberate primary
+    pinch still clicks even with a second hand present."""
+    pipe, mouse, hud, tracker = make_pipeline(mode=Mode.CONTROL)
+    tracker.result = two_hands(_shift(pinch_hand(), 0.1, 0.0),
+                               _shift(fist(), -0.1, 0.0))
+    for _ in range(2):
+        pipe.step(FRAME)
+    assert any(c[0] == "click" for c in mouse.calls)
