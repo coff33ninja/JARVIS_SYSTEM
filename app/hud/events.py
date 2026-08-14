@@ -8,7 +8,7 @@ unit-testable (09_TESTING "HUD protocol") and language-agnostic.
 from __future__ import annotations
 
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any
 
 

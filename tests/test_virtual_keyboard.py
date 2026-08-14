@@ -28,11 +28,11 @@ def test_press():
     v._gui.press.assert_called_once_with("enter")
 
 
-def test_osk_unavailable_off_windows(monkeypatch):
-    monkeypatch.setattr("app.control.virtual_keyboard.platform.system", lambda: "Linux")
-    v = VirtualKeyboard()
-    assert v.osk_available is False
-    assert v.toggle_osk() is False
+def test_osk_unavailable_off_windows():
+    with patch("app.control.virtual_keyboard.platform.system", return_value="Linux"):
+        v = VirtualKeyboard()
+        assert v.osk_available is False
+        assert v.toggle_osk() is False
 
 
 def test_osk_toggle_show_and_hide(monkeypatch):

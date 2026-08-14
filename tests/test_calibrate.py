@@ -96,8 +96,6 @@ def _start(tmp_path: Path, pipeline=None):
 
 
 def _get(server, path: str):
-    import urllib.error
-
     port = server._httpd.server_address[1]
     url = f"http://127.0.0.1:{port}{path}"
     try:
@@ -108,8 +106,6 @@ def _get(server, path: str):
 
 
 def _post(server, path: str, payload: dict):
-    import urllib.error
-
     port = server._httpd.server_address[1]
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",

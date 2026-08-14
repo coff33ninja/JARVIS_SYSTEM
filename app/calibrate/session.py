@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..config import CONFIG_FILE, AppConfig
 from ..perception.calibration import fit_homography, is_valid_homography

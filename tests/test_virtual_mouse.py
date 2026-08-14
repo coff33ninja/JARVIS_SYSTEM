@@ -72,9 +72,9 @@ def test_available_when_import_fails(monkeypatch):
             raise ImportError("pyautogui not importable")
         return real_import(name, *a, **kw)
 
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-    v = VirtualMouse()
-    assert v.available is False
+    with patch("builtins.__import__", fake_import):
+        v = VirtualMouse()
+        assert v.available is False
 
 
 def test_available_when_ok():
@@ -83,11 +83,12 @@ def test_available_when_ok():
     assert v.available is True
 
 
-def test_move_duration_configurable():
-    v = VirtualMouse(move_duration=0.1)
+@pytest.mark.parametrize("duration", [0.0, 0.1, 0.5])
+def test_move_duration_configurable(duration):
+    v = VirtualMouse(move_duration=duration)
     v._gui = Mock()
     v.move(0, 0)
-    v._gui.moveTo.assert_called_once_with(0, 0, duration=0.1)
+    v._gui.moveTo.assert_called_once_with(0, 0, duration=duration)
 
 
 def test_failsafe_and_pause_set_on_init():

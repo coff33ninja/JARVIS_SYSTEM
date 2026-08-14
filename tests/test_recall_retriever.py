@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.agent.recall.config import RecallConfig
 from app.agent.recall.retriever import Recaller
-from app.agent.recall.store import Episode, Fact, MemoryStore
+from app.agent.recall.store import Episode, Fact
 
 
 class FlakyEmbedder:

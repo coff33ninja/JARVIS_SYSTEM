@@ -17,7 +17,6 @@ import logging
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

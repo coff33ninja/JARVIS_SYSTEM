@@ -86,6 +86,15 @@ def test_persists_across_reopen(tmp_path):
     with MemoryStore(db) as ms:
         hits = ms.keyword_search("survives")
         assert len(hits) == 1
+    with sqlite3.connect(db) as conn:
+        rows = conn.execute("SELECT content FROM facts").fetchall()
+    assert ("survives restart",) in rows
+
+
+@pytest.mark.parametrize("importance", [0.5, 0.9, 0.25])
+def test_fact_importance_round_trip(store, importance):
+    fid = store.add_fact(Fact("important fact", importance=importance))
+    assert store.get_row("facts", fid)["importance"] == importance
 
 
 def test_stats(store):

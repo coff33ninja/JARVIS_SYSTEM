@@ -62,8 +62,8 @@ def test_available_when_pynput_fails(monkeypatch):
             raise ImportError("no pynput")
         return real_import(name, *a, **kw)
 
-    monkeypatch.setattr(builtins, "__import__", fake_import)
-    assert MediaController().available is False
+    with patch("builtins.__import__", fake_import):
+        assert MediaController().available is False
 
 
 def test_all_media_actions_have_keys():

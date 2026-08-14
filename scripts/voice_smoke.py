@@ -94,6 +94,9 @@ def main() -> int:
     tts = TTSEngine(TTSConfig())
     print(f"[2/5] SAPI TTS available: {tts.available}")
 
+    voice_cfg = VoiceConfig.from_env()
+    print(f"      wake word: '{voice_cfg.wake_word}'")
+
     with tempfile.TemporaryDirectory() as tmp:
         wav = tmp + "\\utterance.wav"
         synth_s = synthesize(args.phrase, wav)
@@ -104,9 +107,12 @@ def main() -> int:
         stt_s = time.perf_counter() - t0
         print(f"[4/5] STT: '{text}' ({stt_s:.2f}s)")
 
-        command = VoiceLoop._strip_wake(text.strip(), "jarvis").strip()
+        command = VoiceLoop._strip_wake(text.strip(), voice_cfg.wake_word).strip()
         if not command:
-            print("wake word 'jarvis' not heard in transcription", file=sys.stderr)
+            print(
+                f"wake word '{voice_cfg.wake_word}' not heard in transcription",
+                file=sys.stderr,
+            )
             return 1
         print(f"      command (wake stripped): '{command}'")
 

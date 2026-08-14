@@ -12,7 +12,6 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Optional
 
 from ..config import AppConfig
 from ..control.menu import MenuCategory, MenuItem, MenuState, RadialMenu

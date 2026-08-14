@@ -15,9 +15,12 @@ from app.perception.hand_tracker import (
 )
 
 
-def test_result_detected_flag():
-    assert HandTrackingResult().detected is False
-    assert HandTrackingResult(hands=[[(0.0, 0.0, 0.0)] * 21]).detected is True
+@pytest.mark.parametrize(
+    "hands,detected",
+    [(None, False), ([[(0.0, 0.0, 0.0)] * 21], True)],
+)
+def test_result_detected_flag(hands, detected):
+    assert HandTrackingResult(hands=hands).detected is detected
 
 
 def test_result_lands_on_none_when_empty():

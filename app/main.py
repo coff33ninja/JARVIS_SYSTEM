@@ -58,7 +58,8 @@ def build_pipeline(
         server = HUDServer(HUDConfig(host=cfg.hud.host, port=cfg.hud.port))
         if server.start():
             hud = server
-    return ControlPipeline(config=cfg, hud=hud, on_attention=on_attention)
+    mouse = VirtualMouse(failsafe=cfg.control.failsafe)
+    return ControlPipeline(config=cfg, hud=hud, mouse=mouse, on_attention=on_attention)
 
 
 def main(argv: list[str] | None = None) -> int:

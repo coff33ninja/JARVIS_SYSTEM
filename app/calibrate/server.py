@@ -31,7 +31,7 @@ import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from ..config import CONFIG_FILE, AppConfig, update_config
 from .session import CalibrationController

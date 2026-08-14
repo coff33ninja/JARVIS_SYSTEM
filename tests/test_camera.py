@@ -40,8 +40,9 @@ def test_open_failure():
     cap.release.assert_called_once()
 
 
-def test_read_returns_frame():
-    frame = np.zeros((10, 10, 3), dtype=np.uint8)
+@pytest.mark.parametrize("shape", [(10, 10, 3), (4, 4, 3), (640, 480, 3)])
+def test_read_returns_frame(shape):
+    frame = np.zeros(shape, dtype=np.uint8)
     with patch("cv2.VideoCapture", return_value=_fake_cap(frame)):
         cam = Camera(0)
         cam.open()

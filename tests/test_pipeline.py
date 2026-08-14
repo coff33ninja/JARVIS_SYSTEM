@@ -663,18 +663,17 @@ def test_presentation_pinch_is_inert():
     assert not any(c[0] in ("click", "right_click") for c in mouse.calls)
 
 
-def test_presentation_swipe_navigates_slides():
+@pytest.mark.parametrize(
+    ("from_sx", "to_sx", "expected"),
+    [(400, 900, ("pagedown",)), (900, 200, ("pageup",))],
+)
+def test_presentation_swipe_navigates_slides(from_sx, to_sx, expected):
     pipe, mouse, _hud, _ = make_pipeline(hands(point_hand()), mode=Mode.PRESENTATION)
-    pipe._prev_move_sx = 400
+    pipe._prev_move_sx = from_sx
     pipe._swipe_accum = 0.0
     pipe._swipe_last = 0.0
-    pipe._swipe(900, [])  # right sweep = next slide
-    assert ("hotkey", ("pagedown",)) in mouse.calls
-    pipe._prev_move_sx = 900
-    pipe._swipe_accum = 0.0
-    pipe._swipe_last = 0.0
-    pipe._swipe(200, [])  # left sweep = previous slide
-    assert ("hotkey", ("pageup",)) in mouse.calls
+    pipe._swipe(to_sx, [])  # right sweep = next slide, left sweep = previous
+    assert ("hotkey", expected) in mouse.calls
     assert ("hotkey", ("alt", "tab")) not in mouse.calls
 
 

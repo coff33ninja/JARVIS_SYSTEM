@@ -164,13 +164,17 @@ class AppConfig:
     # ------------------------------------------------------------------ #
 
     @classmethod
-    def load(cls, path: str | Path = CONFIG_FILE) -> AppConfig:
+    def load(cls, path: str | Path | None = None) -> AppConfig:
         """Load from YAML. Missing file -> defaults (never raises).
 
-        Unknown keys are ignored; invalid values fall back to the field
-        default and log a warning. This keeps a stale or hand-edited config
-        from bricking the app.
+        ``JARVIS_CONFIG`` env var overrides the config path (matching the
+        ``JARVIS_*`` env pattern used by the agent modules); a missing file
+        falls back to defaults. Unknown keys are ignored; invalid values fall
+        back to the field default and log a warning. This keeps a stale or
+        hand-edited config from bricking the app.
         """
+        if path is None:
+            path = os.getenv("JARVIS_CONFIG", CONFIG_FILE)
         cfg = cls()
         path = Path(path) if path is not None else Path(CONFIG_FILE)
         if not path.exists():

@@ -18,8 +18,6 @@ agent still runs).
 
 from __future__ import annotations
 
-from typing import Optional
-
 from .modes import _TRANSITIONS, Mode, ModeMachine
 
 # Phrase substrings -> target mode. Ordered so longer/overlapping phrases win.
