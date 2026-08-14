@@ -3,8 +3,8 @@
 The secondary hand's fist (held >= ``menu_hold_ms``) opens a radial menu on
 the HUD; the primary hand's reticle position drives the highlight, a pinch
 confirms, an open palm cancels. This module is the pure state machine — the
-trigger (pipeline) is wired; rendering (HUD) and the action execution
-(registry) land in later slices.
+trigger (pipeline) and rendering (MenuEvent -> ``hud/index.html``) are wired;
+action execution through the registry lands in a later slice.
 
 Menu geometry follows 16_INTERACTION_RESEARCH.md: radial/pie layout, capped
 at 8 items per layer, two layers (categories -> items).

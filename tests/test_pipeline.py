@@ -1076,3 +1076,49 @@ def test_modifier_none_with_single_hand():
     step_actions(pipe, 1000.0)
     assert pipe._modifier_hand(pipe.tracker.result) is None
     assert pipe._menu.state is MenuState.CLOSED
+
+
+def menu_events(hud):
+    return [e for e in hud.events if e["type"] == "menu"]
+
+
+def test_menu_event_broadcast_on_open():
+    pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens menu
+    evs = menu_events(hud)
+    assert evs, "no menu event emitted"
+    last = evs[-1]
+    assert last["state"] == "open"
+    assert any(c["id"] == "modes" for c in last["categories"])
+    assert any(c["id"] == "screens" for c in last["categories"])
+    # The reticle was pointing up-left into Modes at open.
+    assert last["category"] == "modes"
+
+
+def test_menu_event_highlight_tracks_reticle():
+    pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    # Move the primary reticle east (hand shifted left, selfie mirror).
+    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, 0.0),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.4)
+    assert any(e["state"] == "open" and e["category"] == "screens"
+               for e in menu_events(hud))
+
+
+def test_menu_event_confirm_emits_closed():
+    pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    pipe.tracker.result = two_hands(_shift(pinch_hand(), -0.3, -0.3),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.35)  # pinch confirms mode.control
+    assert menu_events(hud)[-1]["state"] == "closed"

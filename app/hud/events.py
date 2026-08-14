@@ -67,6 +67,29 @@ class MonitorsEvent:
                 "active_monitor": self.active_monitor, "ts": self.ts}
 
 
-def encode(event: SkeletonEvent | ReticleEvent | StatusEvent | MonitorsEvent) -> dict[str, Any]:
+@dataclass
+class MenuEvent:
+    """Radial menu state for the overlay to draw (04 fist menu).
+
+    ``state`` is one of "closed" / "open" / "confirmed" (the state machine
+    lives in app/control/menu.py; the pipeline emits this so the frontend can
+    render). ``category`` / ``item`` are the ids under the reticle highlight,
+    empty when nothing is selected. ``categories`` carries the full (small)
+    menu structure: pie slices and their leaf items.
+    """
+
+    state: str = "closed"
+    category: str = ""
+    item: str = ""
+    categories: list[dict[str, Any]] = field(default_factory=list)
+    ts: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "menu", "state": self.state, "category": self.category,
+                "item": self.item, "categories": self.categories, "ts": self.ts}
+
+
+def encode(event: (SkeletonEvent | ReticleEvent | StatusEvent
+                   | MonitorsEvent | MenuEvent)) -> dict[str, Any]:
     """Normalise any HUD event to its wire dict (mirrors asdict for safety)."""
     return event.to_dict()

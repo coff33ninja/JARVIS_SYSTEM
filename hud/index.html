@@ -24,6 +24,7 @@
             color: #6ee7ff; font-size: 11px; text-align: center;
             text-shadow: 0 0 4px rgba(110,231,255,.8); width: 40px; }
   #skeleton { position: fixed; inset: 0; z-index: 0; opacity: .9; }
+  #menu { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
   #mapCanvas { background: rgba(0,0,0,.25); border: 1px solid rgba(110,231,255,.3);
                border-radius: 4px; }
   #calib { position: fixed; right: 16px; bottom: 12px; z-index: 2; opacity: .6;
@@ -36,6 +37,7 @@
   <div id="retX"><div class="line hl"></div><div class="line vl"></div>
     <div id="retMon"></div></div>
   <canvas id="skeleton"></canvas>
+  <canvas id="menu"></canvas>
   <a id="calib" href="http://127.0.0.1:8766/" target="_blank">calibrate</a>
 <script>
 (function () {
@@ -44,6 +46,8 @@
   const retMon = document.getElementById('retMon');
   const canvas = document.getElementById('skeleton');
   const ctx = canvas.getContext('2d');
+  const menuCanvas = document.getElementById('menu');
+  const menuCtx = menuCanvas.getContext('2d');
   const mapC = document.getElementById('mapCanvas');
   const mctx = mapC.getContext('2d');
   let monitors = [];
@@ -52,6 +56,9 @@
     canvas.width = window.innerWidth * devicePixelRatio;
     canvas.height = window.innerHeight * devicePixelRatio;
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    menuCanvas.width = window.innerWidth * devicePixelRatio;
+    menuCanvas.height = window.innerHeight * devicePixelRatio;
+    menuCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   }
   sizeCanvas();
   window.addEventListener('resize', sizeCanvas);
@@ -125,6 +132,82 @@
   const MODE_COLORS = {idle: '#8a8a8a', control: '#6ee7ff', chat: '#ffd166',
     transfer: '#8ce99a', presentation: '#ff8fa3'};
 
+  // Radial menu (04_GESTURE_VOCABULARY fist menu). Two layers: category pie,
+  // then leaf items inside the highlighted category. Highlight follows the
+  // reticle; the backend sends category/item ids on every change.
+  const ACCENT = '110,231,255';
+  let menuData = null;
+
+  function pieSector(cx, cy, r0, r1, a0, a1) {
+    menuCtx.beginPath();
+    menuCtx.arc(cx, cy, r1, a0, a1);
+    if (r0 > 0) {
+      menuCtx.arc(cx, cy, r0, a1, a0, true);
+      menuCtx.closePath();
+    } else {
+      menuCtx.lineTo(cx, cy);
+      menuCtx.closePath();
+    }
+  }
+
+  function drawMenu() {
+    const w = window.innerWidth, h = window.innerHeight;
+    menuCtx.clearRect(0, 0, w, h);
+    if (!menuData || menuData.state !== 'open') return;
+    const cats = menuData.categories || [];
+    if (!cats.length) return;
+    const cx = w / 2, cy = h / 2;
+    const R = Math.min(w, h) * 0.34;
+    const rItem = R * 0.56;   // inner edge of the category ring
+    const n = cats.length;
+    const labelR = (R + rItem) / 2;
+
+    for (let i = 0; i < n; i++) {
+      const a0 = -Math.PI / 2 + i * 2 * Math.PI / n;
+      const a1 = a0 + 2 * Math.PI / n;
+      const am = (a0 + a1) / 2;
+      const sel = cats[i].id === menuData.category;
+      menuCtx.fillStyle = sel ? `rgba(${ACCENT},.28)` : `rgba(${ACCENT},.10)`;
+      pieSector(cx, cy, rItem, R, a0, a1);
+      menuCtx.fill();
+      menuCtx.strokeStyle = `rgba(${ACCENT},.75)`;
+      menuCtx.lineWidth = 1.5;
+      menuCtx.stroke();
+      menuCtx.fillStyle = sel ? '#e9fbff' : '#9fd9e6';
+      menuCtx.font = `${sel ? 15 : 13}px "Segoe UI", sans-serif`;
+      menuCtx.textAlign = 'center';
+      menuCtx.textBaseline = 'middle';
+      menuCtx.fillText(cats[i].label,
+        cx + Math.cos(am) * labelR, cy + Math.sin(am) * labelR);
+    }
+
+    // Leaf items inside the highlighted category (second layer).
+    const cat = cats.find(c => c.id === menuData.category);
+    const items = (cat && cat.items) || [];
+    if (items.length > 1) {
+      for (let j = 0; j < items.length; j++) {
+        const a0 = -Math.PI / 2 + j * 2 * Math.PI / items.length;
+        const a1 = a0 + 2 * Math.PI / items.length;
+        const am = (a0 + a1) / 2;
+        const sel = items[j].id === menuData.item;
+        menuCtx.fillStyle = sel ? `rgba(${ACCENT},.40)` : `rgba(${ACCENT},.12)`;
+        pieSector(cx, cy, 0, rItem * 0.92, a0, a1);
+        menuCtx.fill();
+        menuCtx.strokeStyle = `rgba(${ACCENT},.7)`;
+        menuCtx.lineWidth = 1;
+        menuCtx.stroke();
+        menuCtx.fillStyle = sel ? '#ffffff' : '#a8dde8';
+        menuCtx.font = `${sel ? 13 : 11}px "Segoe UI", sans-serif`;
+        menuCtx.fillText(items[j].label,
+          cx + Math.cos(am) * rItem * 0.46, cy + Math.sin(am) * rItem * 0.46);
+      }
+    }
+    menuCtx.fillStyle = `rgba(${ACCENT},.9)`;
+    menuCtx.beginPath();
+    menuCtx.arc(cx, cy, 6, 0, Math.PI * 2);
+    menuCtx.fill();
+  }
+
   let ws = null, reconn = 0;
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -144,6 +227,9 @@
       } else if (msg.type === 'monitors') {
         monitors = msg.monitors || [];
         drawMap(-1);
+      } else if (msg.type === 'menu') {
+        menuData = msg;
+        drawMenu();
       } else if (msg.type === 'status') {
         const g = GESTURE_NAMES[msg.gesture] || '';
         const gHtml = g ? `<div class="gesture" style="color:${MODE_COLORS[msg.mode] || '#6ee7ff'}">${g}</div>` : '';

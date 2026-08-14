@@ -107,12 +107,14 @@ scroll are untouched):
    the menu is open it owns the frame: gesture dispatch (click/catch/release)
    is suspended so the confirming pinch can't also fire a click.
 
-   Implemented in `ControlPipeline._modifier` + `_menu_frame`. Modes
-   (via `ModeMachine.goto`, which jumps directly — it does not go through the
-   transition table), Screens, Zoom, and Tune execute today; the Gestures
-   category lands with the registry-dispatch slice. This is the "tune or
-   select modes for that scenario" surface, and pulls the *dual-hand /
-   modifier* interaction forward from Phase 6 into Phase 2.
+   Implemented in `ControlPipeline._modifier` + `_menu_frame`; the HUD overlay
+   (`hud/index.html`) draws the pie via the `menu` event (category ring + leaf
+   ring, highlight following the reticle). Modes (via `ModeMachine.goto`,
+   which jumps directly — it does not go through the transition table),
+   Screens, Zoom, and Tune execute today; the Gestures category lands with the
+   registry-dispatch slice. This is the "tune or select modes for that
+   scenario" surface, and pulls the *dual-hand / modifier* interaction forward
+   from Phase 6 into Phase 2.
 
 All three levels are gated on two hands being tracked and are suppressed by
 the two-hand rest-pose guard (a secondary open palm / spread frame stays a

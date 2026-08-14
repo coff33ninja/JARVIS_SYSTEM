@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 from app.hud.events import (
+    MenuEvent,
+    MonitorsEvent,
     ReticleEvent,
     SkeletonEvent,
     StatusEvent,
@@ -52,12 +54,35 @@ def test_encode_normalises_all_event_types():
     assert encode(SkeletonEvent())["type"] == "skeleton"
     assert encode(ReticleEvent(0, 0))["type"] == "reticle"
     assert encode(StatusEvent())["type"] == "status"
+    assert encode(MonitorsEvent())["type"] == "monitors"
+    assert encode(MenuEvent())["type"] == "menu"
 
 
 def test_timestamps_present():
     assert "ts" in SkeletonEvent().to_dict()
     assert "ts" in ReticleEvent(0, 0).to_dict()
     assert "ts" in StatusEvent().to_dict()
+    assert "ts" in MenuEvent().to_dict()
+
+
+def test_menu_event_schema():
+    d = MenuEvent(
+        state="open", category="modes", item="mode.chat",
+        categories=[{"id": "modes", "label": "Modes",
+                     "items": [{"id": "mode.chat", "label": "Chat"}]}],
+    ).to_dict()
+    assert d["type"] == "menu"
+    assert d["state"] == "open"
+    assert d["category"] == "modes"
+    assert d["item"] == "mode.chat"
+    assert d["categories"][0]["id"] == "modes"
+    assert json.dumps(d)  # JSON-safe
+    # Closed default: no selection, empty structure.
+    closed = MenuEvent().to_dict()
+    assert closed["state"] == "closed"
+    assert closed["category"] == ""
+    assert closed["item"] == ""
+    assert closed["categories"] == []
 
 
 def test_monitors_event_active_monitor_field():

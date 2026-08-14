@@ -17,7 +17,7 @@ from ..config import AppConfig
 from ..control.menu import MenuCategory, MenuItem, MenuState, RadialMenu
 from ..control.modes import Mode, ModeMachine
 from ..control.virtual_mouse import VirtualMouse
-from ..hud.events import MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
+from ..hud.events import MenuEvent, MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
 from .camera import Camera
 from .geometry import (
     classify,
@@ -151,6 +151,7 @@ class ControlPipeline:
         self._mod_count: int | None = None
         self._mod_count_frames = 0
         self._mod_count_fired = False
+        self._menu_dirty = False
 
     def _build_menu(self) -> RadialMenu:
         """Fist-menu categories (04_GESTURE_VOCABULARY "Fist menu").
@@ -222,6 +223,7 @@ class ControlPipeline:
                 actions.append(PipelineAction("drag_end", gesture="fist"))
             if self._menu.state is MenuState.OPEN:
                 self._menu.close()
+                self._menu_dirty = True
                 actions.append(PipelineAction("menu.close", gesture="hand_lost"))
             self._lost_frames += 1
             # Grace: brief detection flickers keep the smoothing filter so the
@@ -254,6 +256,8 @@ class ControlPipeline:
                 and not self._rest_pose(result, pose)):
             actions.extend(self._dispatch(pose))
         actions.extend(self._circle(pose))
+        if self._menu_dirty or self._menu.state is not MenuState.CLOSED:
+            self._broadcast_menu()
         return actions
 
     # ------------------------------------------------------------------ #
@@ -369,6 +373,7 @@ class ControlPipeline:
                 and self._menu.state is MenuState.CLOSED
                 and self._menu.open()):
             self._menu_open_at = now
+            self._menu_dirty = True
             actions.append(PipelineAction("menu.open", gesture="fist"))
         return True
 
@@ -481,15 +486,18 @@ class ControlPipeline:
         now = time.monotonic()
         if now - self._menu_open_at >= cfg.menu_timeout_ms / 1000.0:
             self._menu.close()
+            self._menu_dirty = True
             actions.append(PipelineAction("menu.close", gesture="timeout"))
             return
         if mod is None:
             # Secondary hand gone: the menu has no anchor, close it.
             self._menu.close()
+            self._menu_dirty = True
             actions.append(PipelineAction("menu.close", gesture="hand_lost"))
             return
         if mod.open_palm or (pose is not None and pose.open_palm):
             if self._menu.cancel():
+                self._menu_dirty = True
                 actions.append(PipelineAction("menu.cancel", gesture="open_palm"))
             return
         if pose is not None and pose.index_extended:
@@ -498,11 +506,13 @@ class ControlPipeline:
             dx, dy = sx - (sx0 + sw / 2.0), sy - (sy0 + sh / 2.0)
             self._menu.select_category(dx, dy)
             self._menu.select_item(dx, dy)
+            self._menu_dirty = True
         if pose is not None and pose.pinch and not self._prev_pinch:
             item = self._menu.confirm()
             if item is not None:
                 self._menu.close()
                 self._prev_pinch = True
+                self._menu_dirty = True
                 actions.append(PipelineAction("menu.confirm",
                                               gesture="pinch"))
                 executed = self._execute_menu_item(item)
@@ -899,6 +909,7 @@ class ControlPipeline:
         self._reset_modifier_state()
         if self._menu.state is MenuState.OPEN:
             self._menu.close()
+            self._menu_dirty = True
 
     # ------------------------------------------------------------------ #
     # HUD + stats
@@ -924,6 +935,30 @@ class ControlPipeline:
             self.hud.broadcast(ReticleEvent(
                 x=sx, y=sy, monitor=monitor, zone=self.mapper.zone_for(*pose.index_xy)))
         self._emit_status()
+
+    def _broadcast_menu(self) -> None:
+        """Emit the current radial menu state to the HUD overlay."""
+        if self.hud is None:
+            return
+        cats = self._menu.open_categories
+        category = ""
+        item = ""
+        if self._menu.state is MenuState.OPEN and cats:
+            if 0 <= self._menu.category_idx < len(cats):
+                category = cats[self._menu.category_idx].id
+                items = cats[self._menu.category_idx].items
+                if self._menu.item_idx is not None and 0 <= self._menu.item_idx < len(items):
+                    item = items[self._menu.item_idx].id
+        self.hud.broadcast(MenuEvent(
+            state=self._menu.state.value,
+            category=category,
+            item=item,
+            categories=[{"id": c.id, "label": c.label,
+                         "items": [{"id": i.id, "label": i.label}
+                                   for i in c.items]}
+                        for c in cats],
+        ))
+        self._menu_dirty = False
 
     def _emit_status(self) -> None:
         if self.hud is None:
