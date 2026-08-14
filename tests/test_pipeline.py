@@ -1122,3 +1122,79 @@ def test_menu_event_confirm_emits_closed():
                                     _shift(fist(), -0.3, 0.0))
     step_actions(pipe, 1000.35)  # pinch confirms mode.control
     assert menu_events(hud)[-1]["state"] == "closed"
+
+
+# ------------------------------------------------------------------ #
+# ADR-011: registry dispatch + Gestures menu category
+# ------------------------------------------------------------------ #
+
+def test_registry_dispatch_resolves_mode_bindings():
+    """_dispatch consults the binding registry, not hardcoded branches."""
+    pipe, *_ = make_pipeline()
+    assert pipe._registry.resolve("pinch", "control") == "click.left"
+    assert pipe._registry.resolve("open_palm", "chat") == "release"
+    assert pipe._registry.resolve("open_palm", "transfer") == "catch"
+    assert pipe._registry.resolve("thumbs_up", "control") is None
+
+
+def test_gesture_toggle_disables_pinch():
+    pipe, mouse, *_ = make_pipeline()
+    pipe._registry.set_enabled("click.left", False)
+    pipe.tracker.result = hands(pinch_hand())
+    seen = []
+    for _ in range(pipe.config.control.hold_frames + 2):
+        seen.extend(step_actions(pipe, 1000.0))
+    assert not any(a.name == "left_click" for a in seen)
+    assert not any(c[0] == "click" for c in mouse.calls)
+
+
+def test_gesture_toggle_reenables_pinch():
+    pipe, mouse, *_ = make_pipeline()
+    pipe._registry.set_enabled("click.left", False)
+    pipe._registry.set_enabled("click.left", True)
+    pipe.tracker.result = hands(pinch_hand())
+    seen = []
+    for _ in range(pipe.config.control.hold_frames + 2):
+        seen.extend(step_actions(pipe, 1000.0))
+    assert any(a.name == "left_click" for a in seen)
+
+
+def test_gestures_menu_category_lists_actions():
+    pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
+    pipe.tracker.result = two_hands(_shift(point_hand(), -0.3, -0.3),
+                                    _shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    ev = menu_events(hud)[-1]
+    gestures = next(c for c in ev["categories"] if c["id"] == "gestures")
+    ids = [i["id"] for i in gestures["items"]]
+    assert ids == list(pipe.DISPATCH_ACTIONS)
+    # Rows ship their live enabled state (checkmark).
+    row = next(i for i in gestures["items"] if i["id"] == "click.left")
+    assert row["checked"] is True
+
+
+def test_gestures_menu_confirm_toggles_binding():
+    """Confirming the row under the pointer flips that action off."""
+    pipe, _, hud, _ = make_pipeline(monitors=make_two_monitors())
+    two = lambda secondary: two_hands(  # noqa: E731
+        _shift(point_hand(), 0.3, -0.3), secondary)  # top-left = Gestures wedge
+    pipe.tracker.result = two(_shift(fist(), -0.3, 0.0))
+    step_actions(pipe, 1000.0)
+    step_actions(pipe, 1000.3)  # opens
+    step_actions(pipe, 1000.33)  # highlight Gestures category
+    assert pipe._menu.category_idx == 4
+    # The row under the Gestures wedge is item 7 (catch).
+    pipe.tracker.result = two_hands(_shift(pinch_hand(), 0.3, -0.3),
+                                    _shift(fist(), -0.3, 0.0))
+    actions = step_actions(pipe, 1000.35)  # pinch confirms the same row
+    assert ("gesture.toggle", ("catch", False)) in [
+        (a.name, a.args) for a in actions]
+    # open_palm no longer resolves in Transfer -> catch is inert.
+    assert pipe._registry.resolve("open_palm", "transfer") is None
+    assert pipe._registry.resolve("open_palm", "chat") == "release"
+    # The re-broadcast carries the unchecked row.
+    ev = menu_events(hud)[-1]
+    gestures = next(c for c in ev["categories"] if c["id"] == "gestures")
+    row = next(i for i in gestures["items"] if i["id"] == "catch")
+    assert row["checked"] is False

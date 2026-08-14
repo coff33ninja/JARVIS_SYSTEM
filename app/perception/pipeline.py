@@ -16,6 +16,7 @@ from typing import Callable, Optional
 from ..config import AppConfig
 from ..control.menu import MenuCategory, MenuItem, MenuState, RadialMenu
 from ..control.modes import Mode, ModeMachine
+from ..control.registry import DEFAULT_BINDINGS, GestureRegistry
 from ..control.virtual_mouse import VirtualMouse
 from ..hud.events import MenuEvent, MonitorsEvent, ReticleEvent, SkeletonEvent, StatusEvent
 from .camera import Camera
@@ -92,6 +93,7 @@ class ControlPipeline:
         modes: Optional[ModeMachine] = None,
         frame_source: Optional[Callable[[], object]] = None,
         on_attention: Optional[Callable[[], None]] = None,
+        registry: Optional[GestureRegistry] = None,
     ):
         self.config = config or AppConfig()
         self.camera = camera or Camera(self.config.perception.camera_index,
@@ -142,6 +144,7 @@ class ControlPipeline:
         self._last_status_ts = 0.0
         self._status_gesture = ""
         # Modifier hand (Phase 2): fist menu + monitor selection.
+        self._registry = registry or GestureRegistry(DEFAULT_BINDINGS)
         self._menu = self._build_menu()
         self._menu_open_at = 0.0
         self._mod_fist_start = 0.0
@@ -153,12 +156,24 @@ class ControlPipeline:
         self._mod_count_fired = False
         self._menu_dirty = False
 
+    # Actions the registry can gate inside _dispatch (ADR-011). "attention"
+    # (circle) and "mode.transfer_toggle" (spread) dispatch outside _dispatch,
+    # so toggling them here would lie — they stay out of the menu.
+    DISPATCH_ACTIONS = (
+        "cursor.move", "click.left", "click.right", "drag.toggle",
+        "scroll.tick", "confirm", "cancel", "catch", "release",
+    )
+
+    @staticmethod
+    def _action_label(action_id: str) -> str:
+        return action_id.replace("_", " ").replace(".", " ").title()
+
     def _build_menu(self) -> RadialMenu:
         """Fist-menu categories (04_GESTURE_VOCABULARY "Fist menu").
 
-        Modes / Screens / Zoom / Tune. The Gestures category (dynamic ADR-011
-        rebinding) lands with the registry-dispatch slice; Screens is built
-        from the detected monitor layout and hides itself when empty.
+        Modes / Screens / Zoom / Tune / Gestures (ADR-011 dynamic bindings —
+        each row toggles that action on/off, with a live checkmark). Screens
+        is built from the detected monitor layout and hides itself when empty.
         """
         mode_items = [
             MenuItem(f"mode.{m.value}", m.value.capitalize(),
@@ -174,6 +189,14 @@ class ControlPipeline:
         screen_items.append(MenuItem(
             "screen.all", "All screens", action_id="screen.select",
             params={"index": None}))
+        gesture_items = [
+            MenuItem(action_id, self._action_label(action_id),
+                     action_id="gesture.toggle", params={"action": action_id},
+                     checked=all(b.enabled
+                                 for b in self._registry.by_action(action_id)))
+            for action_id in self.DISPATCH_ACTIONS
+            if self._registry.by_action(action_id)
+        ]
         return RadialMenu([
             MenuCategory("modes", "Modes", items=mode_items),
             MenuCategory("screens", "Screens", items=screen_items),
@@ -197,6 +220,7 @@ class ControlPipeline:
                 MenuItem("tune.invert_y", "Invert Y", action_id="tune",
                          params={"param": "invert_y"}),
             ]),
+            MenuCategory("gestures", "Gestures", items=gesture_items),
         ])
 
     # ------------------------------------------------------------------ #
@@ -541,7 +565,26 @@ class ControlPipeline:
                                   gesture="menu")
         elif pid == "tune":
             return self._tune(item.params.get("param"))
+        elif pid == "gesture.toggle":
+            return self._toggle_gesture(item)
         return None
+
+    def _toggle_gesture(self, item: MenuItem) -> PipelineAction | None:
+        """Flip an action's enabled state (Gestures menu row, ADR-011)."""
+        action_id = item.params.get("action")
+        if not action_id or not self._registry.by_action(action_id):
+            return None
+        target = not all(b.enabled for b in self._registry.by_action(action_id))
+        self._registry.set_enabled(action_id, target)
+        # Refresh the stored checkmark so the next broadcast shows the new
+        # state (the menu's categories survive close/reopen).
+        for cat in self._menu.categories:
+            for it in cat.items:
+                if it.id == action_id:
+                    it.checked = target
+        self._menu_dirty = True
+        return PipelineAction("gesture.toggle", (action_id, target),
+                              gesture="menu")
 
     def _tune(self, param: str) -> PipelineAction | None:
         """Apply a Tune-category adjustment (gain / invert), live."""
@@ -722,32 +765,46 @@ class ControlPipeline:
         if not stable:
             return actions
 
-        if gesture == "point":
+        # Resolve the gesture through the binding registry (ADR-011) and run
+        # the bound action. Seed bindings mirror the old hardcoded branches,
+        # so behavior is unchanged; toggling a binding off leaves the gesture
+        # inert without touching the code. Arbitrary rebind (gesture -> a
+        # different action) still needs per-gesture edge re-arm and lands in a
+        # later slice.
+        action_id = self._registry.resolve(gesture, mode.value)
+        return self._run_action(action_id, gesture, pose, actions)
+
+    def _run_action(self, action_id: str | None, gesture: str, pose,
+                    actions: list[PipelineAction]) -> list[PipelineAction]:
+        """Execute the resolved action. None = unbound/disabled gesture."""
+        if action_id is None:
+            return actions
+        if action_id == "cursor.move":
             sx, sy = self._move_cursor(pose.index_xy, actions)
             self._swipe(sx, actions)
-        elif gesture == "pinch":
+        elif action_id == "click.left":
             actions.extend(self._pinch(pose.index_xy))
-        elif gesture == "two_finger_pinch":
+        elif action_id == "click.right":
             actions.extend(self._two_finger_pinch(pose.index_xy))
-        elif gesture == "fist":
+        elif action_id == "drag.toggle":
             actions.extend(self._fist(pose.index_xy))
-        elif gesture == "v_sign":
+        elif action_id == "scroll.tick":
             self._scroll(pose, actions)
-        elif gesture == "thumbs_up":
+        elif action_id == "confirm":
             if not self._prev_thumbs_up:
-                actions.append(PipelineAction("confirm", gesture="thumbs_up"))
+                actions.append(PipelineAction("confirm", gesture=gesture))
             self._prev_thumbs_up = True
-        elif gesture == "thumbs_down":
+        elif action_id == "cancel":
             if not self._prev_thumbs_down:
-                actions.append(PipelineAction("cancel", gesture="thumbs_down"))
+                actions.append(PipelineAction("cancel", gesture=gesture))
             self._prev_thumbs_down = True
-        elif gesture == "open_palm":
-            # Transfer: open palm = "catch". Chat: open palm = "release".
+        elif action_id == "catch":
             if not self._prev_open_palm:
-                if self.modes.mode == Mode.TRANSFER:
-                    actions.append(PipelineAction("catch", gesture="open_palm"))
-                elif self.modes.mode == Mode.CHAT:
-                    actions.append(PipelineAction("release", gesture="open_palm"))
+                actions.append(PipelineAction("catch", gesture=gesture))
+            self._prev_open_palm = True
+        elif action_id == "release":
+            if not self._prev_open_palm:
+                actions.append(PipelineAction("release", gesture=gesture))
             self._prev_open_palm = True
         return actions
 
@@ -954,7 +1011,8 @@ class ControlPipeline:
             category=category,
             item=item,
             categories=[{"id": c.id, "label": c.label,
-                         "items": [{"id": i.id, "label": i.label}
+                         "items": [{"id": i.id, "label": i.label,
+                                    "checked": i.checked}
                                    for i in c.items]}
                         for c in cats],
         ))

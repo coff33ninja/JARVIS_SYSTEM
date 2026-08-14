@@ -7,9 +7,10 @@
     "repositoryId": null,
     "repositoryName": null,
     "createdAt": "2026-08-14T09:46:28.195Z",
-    "updatedAt": "2026-08-14T09:46:28.195Z",
+    "updatedAt": "2026-08-14T09:48:32.484Z",
     "languages": [
       "HTML",
+      "JSON",
       "Markdown",
       "Powershell",
       "Python",
@@ -596,6 +597,15 @@
         },
         {
           "patternId": "Semgrep_yaml_spring_rule-SpringActuatorFullyEnabled"
+        },
+        {
+          "patternId": "Semgrep_json.aws.security.public-s3-bucket.public-s3-bucket"
+        },
+        {
+          "patternId": "Semgrep_json.aws.security.public-s3-policy-statement.public-s3-policy-statement"
+        },
+        {
+          "patternId": "Semgrep_json.aws.security.wildcard-assume-role.wildcard-assume-role"
         }
       ]
     },
@@ -4963,7 +4973,76 @@
           "patternId": "psscriptanalyzer_psusetoexportfieldsinmanifest"
         }
       ]
+    },
+    {
+      "toolId": "jackson",
+      "patterns": [
+        {
+          "patternId": "jackson_duplicate-keys"
+        },
+        {
+          "patternId": "jackson_parse-error"
+        }
+      ]
+    },
+    {
+      "toolId": "Biome",
+      "patterns": [
+        {
+          "patternId": "Biome_lint_a11y_noAccessKey"
+        },
+        {
+          "patternId": "Biome_lint_a11y_noAutofocus"
+        },
+        {
+          "patternId": "Biome_lint_a11y_noDistractingElements"
+        },
+        {
+          "patternId": "Biome_lint_a11y_noHeaderScope"
+        },
+        {
+          "patternId": "Biome_lint_a11y_noPositiveTabindex"
+        },
+        {
+          "patternId": "Biome_lint_a11y_noRedundantAlt"
+        },
+        {
+          "patternId": "Biome_lint_a11y_noSvgWithoutTitle"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useAltText"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useAnchorContent"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useAriaPropsForRole"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useButtonType"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useHtmlLang"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useIframeTitle"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useMediaCaption"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useValidAriaRole"
+        },
+        {
+          "patternId": "Biome_lint_a11y_useValidLang"
+        },
+        {
+          "patternId": "Biome_lint_suspicious_noBiomeFirstException"
+        },
+        {
+          "patternId": "Biome_lint_suspicious_noDuplicateObjectKeys"
+        }
+      ]
     }
-  ],
-  "exclude": []
+  ]
 }

@@ -111,10 +111,13 @@ scroll are untouched):
    (`hud/index.html`) draws the pie via the `menu` event (category ring + leaf
    ring, highlight following the reticle). Modes (via `ModeMachine.goto`,
    which jumps directly — it does not go through the transition table),
-   Screens, Zoom, and Tune execute today; the Gestures category lands with the
-   registry-dispatch slice. This is the "tune or select modes for that
-   scenario" surface, and pulls the *dual-hand / modifier* interaction forward
-   from Phase 6 into Phase 2.
+   Screens, Zoom, and Tune execute today. The **Gestures** category is live
+   (ADR-011): each row toggles that action on/off with a checkmark, and the
+   dispatch in `ControlPipeline._dispatch` resolves gestures through the
+   `GestureRegistry` instead of hardcoded branches. Rebind-to-another-action
+   and threshold tuning remain (see ADR-011). This is the "tune or select
+   modes for that scenario" surface, and pulls the *dual-hand / modifier*
+   interaction forward from Phase 6 into Phase 2.
 
 All three levels are gated on two hands being tracked and are suppressed by
 the two-hand rest-pose guard (a secondary open palm / spread frame stays a

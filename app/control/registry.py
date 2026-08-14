@@ -6,14 +6,16 @@ gesture conditions, editable live from the HUD fist menu (04_GESTURE_VOCABULARY
 (gesture, mode) key — so collisions like the 5-finger select vs. spread are
 resolvable at runtime instead of baked into code.
 
-This is the data model only; ``ControlPipeline`` dispatch consults it in a
-later slice. The seed bindings mirror today's hardcoded dispatch so the
-registry can replace it without changing behavior.
+This is the data model plus the resolution `ControlPipeline` dispatch
+consults (ADR-011): the seed bindings mirror today's hardcoded dispatch so
+the registry can replace it without changing behavior. The Gestures menu row
+toggles an action on/off via ``set_enabled``; rebind-to-another-action and
+threshold tuning are deferred.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -53,7 +55,10 @@ class GestureRegistry:
     """Ordered binding store with uniqueness enforcement per (gesture, mode)."""
 
     def __init__(self, bindings: list[GestureBinding] | None = None):
-        self._bindings: list[GestureBinding] = list(bindings or [])
+        # Copy, don't share: toggling a binding's enabled state must not leak
+        # into another registry or the DEFAULT_BINDINGS module constant.
+        self._bindings = [replace(b, params=dict(b.params))
+                          for b in (bindings or [])]
 
     # ------------------------------------------------------------------ #
     # mutation

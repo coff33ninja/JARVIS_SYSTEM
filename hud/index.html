@@ -198,7 +198,7 @@
         menuCtx.stroke();
         menuCtx.fillStyle = sel ? '#ffffff' : '#a8dde8';
         menuCtx.font = `${sel ? 13 : 11}px "Segoe UI", sans-serif`;
-        menuCtx.fillText(items[j].label,
+        menuCtx.fillText((items[j].checked ? '\u2713 ' : '') + items[j].label,
           cx + Math.cos(am) * rItem * 0.46, cy + Math.sin(am) * rItem * 0.46);
       }
     }
