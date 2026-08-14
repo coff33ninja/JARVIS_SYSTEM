@@ -1133,14 +1133,17 @@ class ControlPipeline:
         cats = self._menu.open_categories
         category = ""
         item = ""
-        if self._menu.state is MenuState.OPEN and cats:
-            if 0 <= self._menu.category_idx < len(cats):
-                category = cats[self._menu.category_idx].id
-                items = cats[self._menu.category_idx].items
-                if self._menu.item_idx is not None and 0 <= self._menu.item_idx < len(
-                    items
-                ):
-                    item = items[self._menu.item_idx].id
+        if (
+            self._menu.state is MenuState.OPEN
+            and cats
+            and 0 <= self._menu.category_idx < len(cats)
+        ):
+            category = cats[self._menu.category_idx].id
+            items = cats[self._menu.category_idx].items
+            if self._menu.item_idx is not None and 0 <= self._menu.item_idx < len(
+                items
+            ):
+                item = items[self._menu.item_idx].id
         self.hud.broadcast(
             MenuEvent(
                 state=self._menu.state.value,

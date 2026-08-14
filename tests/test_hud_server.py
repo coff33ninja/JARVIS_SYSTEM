@@ -53,15 +53,11 @@ def test_server_broadcasts_events(server):
 
 
 def test_server_serves_index_html(server):
-    async def run():
-        uri = f"http://{server.config.host}:{server.config.port}/"
-        import urllib.request
+    uri = f"http://{server.config.host}:{server.config.port}/"
+    import urllib.request
 
-        with urllib.request.urlopen(uri, timeout=5) as resp:
-            body = resp.read().decode()
-        return body
-
-    body = asyncio.new_event_loop().run_until_complete(run())
+    with urllib.request.urlopen(uri, timeout=5) as resp:
+        body = resp.read().decode()
     assert "JARVIS HUD" in body
 
 

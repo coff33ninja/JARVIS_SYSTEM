@@ -18,6 +18,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Self
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS facts (
@@ -111,7 +112,7 @@ class MemoryStore:
     def close(self) -> None:
         self._conn.close()
 
-    def __enter__(self) -> MemoryStore:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc) -> None:

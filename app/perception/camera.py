@@ -8,6 +8,7 @@ degradation principle: control keeps working when a webcam slot fails).
 from __future__ import annotations
 
 import logging
+from typing import Self
 
 import cv2
 
@@ -70,7 +71,7 @@ class Camera:
     def close(self) -> None:
         self.release()
 
-    def __enter__(self) -> Camera:
+    def __enter__(self) -> Self:
         self.open()
         return self
 

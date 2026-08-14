@@ -81,9 +81,8 @@ def detect_monitors() -> list[ScreenRect]:
             return 1
 
         proc = _MonitorEnumProc(_cb)
-        if user32.EnumDisplayMonitors(0, 0, proc, 0):
-            if rects:
-                return rects
+        if user32.EnumDisplayMonitors(0, 0, proc, 0) and rects:
+            return rects
     except Exception:  # pragma: no cover - non-Windows / restricted env
         pass
     try:
@@ -200,7 +199,7 @@ class CursorMapper:
 
         px = max(x, min(x + w - 1, px))
         py = max(y, min(y + h - 1, py))
-        return (int(round(px)), int(round(py)))
+        return (round(px), round(py))
 
     def zone_for(self, nx: float, ny: float) -> str:
         """Named zone string for a normalized hand position."""

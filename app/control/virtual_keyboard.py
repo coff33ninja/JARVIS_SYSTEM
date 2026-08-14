@@ -84,6 +84,7 @@ class VirtualKeyboard:
                 capture_output=True,
                 text=True,
                 timeout=5,
+                check=False,
             ).stdout
         except (OSError, subprocess.TimeoutExpired):  # pragma: no cover
             return False
@@ -99,7 +100,10 @@ class VirtualKeyboard:
         if self.osk_running():
             try:
                 subprocess.run(
-                    ["taskkill", "/IM", "osk.exe", "/F"], capture_output=True, timeout=5
+                    ["taskkill", "/IM", "osk.exe", "/F"],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
                 )
             except (OSError, subprocess.TimeoutExpired):  # pragma: no cover
                 pass

@@ -122,6 +122,7 @@ class TTSEngine:
                     tmp_path,
                 ],
                 input=text.encode("utf-8"),
+                check=False,
                 capture_output=True,
                 timeout=30,
             )
