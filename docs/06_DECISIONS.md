@@ -88,6 +88,34 @@ Architecture Decision Records. Each entry records a decision made during plannin
 - **Status (Phase 2):** Implemented for the toggle path. `ControlPipeline._dispatch` resolves each gesture through `GestureRegistry` (`app/control/registry.py`); the Gestures menu row lists every dispatchable action with a live checkmark and confirming a row flips it on/off (seed bindings mirror the old hardcoded branches, so behavior is unchanged until you edit). Rebind-to-another-action and threshold tuning are still deferred: arbitrary rebinding needs per-gesture edge re-arm (the click/catch edge flags are gesture-coupled today). `attention` (circle) and `mode.transfer_toggle` (spread) dispatch outside `_dispatch` and are intentionally not listed, since toggling them would lie.
 - **Consequences:** New gesture variations become config/bindings, not code. Requires refactoring the dispatch in `pipeline.py` to consult the registry, a config schema for bindings, and menu plumbing. Registry uniqueness is the invariant that keeps collisions (e.g. 5-finger select vs. spread) resolvable at runtime instead of baked in. Note: `GestureRegistry` deep-copies its seed bindings, so toggling never leaks between registries or back into `DEFAULT_BINDINGS`.
 
+## ADR-012: Guided 4-corner pinch calibration for spatial mapping
+
+- **Status:** Accepted (Phase 2), implemented
+- **Context:** Cursor mapping defaults to a linear gain/invert formula, which
+  breaks as soon as the camera placement or the multi-monitor layout differs
+  from the assumed plane. `13_MULTIMONITOR.md` calls for a per-profile
+  homography from 4 screen-corner correspondences; `app/perception/calibration.py`
+  already ships a pure-DLT `fit_homography`.
+- **Options:** (a) Page-button capture — the user clicks "capture" at each
+  corner in the 8766 form; deterministic and trivially testable, but the page
+  has no index-tip signal and it fights the gesture-first UX; (b) pinch-driven
+  capture — the pipeline is armed and a pinch edge records the normalized
+  index tip instead of clicking, matching the documented "point and pinch"
+  flow; (c) a dedicated calibration mode in the mode machine — cleanest
+  separation but adds a whole mode/transition/permission surface for one flow.
+- **Decision:** (b) as primary, with (a) kept as a thin explicit
+  `POST /api/calibration/capture {nx, ny}` fallback for tests and scripting.
+  A `CalibrationController` (`app/calibrate/session.py`) owns the session
+  state machine, arms/disarms `ControlPipeline.arm_calibration`, and on the
+  4th capture applies the fitted homography live (`mapper.config.calibration`
+  + `control.calibration`) and persists it. Degenerate fits reset all four
+  captures so recovery is guaranteed (a one-corner retry can stay degenerate).
+- **Consequences:** `click.left` becomes capture-aware while armed, so the
+  calibration session can't produce stray clicks. The transparent-HUD corner
+  reticle and passive RANSAC refinement (`control.passive_calibrate`) remain
+  deferred. HTTP endpoints: `GET /api/calibration` (state), `POST
+  /api/calibration/{start,reset,clear,capture}`.
+
 ## Open Questions / Deferred Decisions
 
 - **Q-01:** Whether the tablet runs its own gesture detector or is a "ready to receive" peer only. Deferred to Phase 4.

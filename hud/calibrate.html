@@ -54,6 +54,18 @@
   <canvas id="map" width="600" height="240"></canvas>
   <div id="monList" class="mon-list"></div>
 
+  <h1 style="margin-top:28px">Auto-calibrate (spatial awareness)</h1>
+  <section>
+    <div id="calStatus" style="font-size:13px; line-height:1.6; min-height:44px;
+         color:#b9cad9; margin-bottom:10px;"></div>
+    <div class="actions" style="margin-top:0;">
+      <button id="calStart">Start</button>
+      <button id="calReset" class="secondary">Reset</button>
+      <button id="calClear" class="secondary">Clear calibration</button>
+      <span id="calMsg"></span>
+    </div>
+  </section>
+
 <script>
 (function () {
   const root = document.getElementById('root');
@@ -224,6 +236,57 @@
   };
   document.getElementById('reload').onclick = load;
   load();
+
+  // --- Auto-calibrate: guided 4-corner pinch calibration -------------
+  const calStatus = document.getElementById('calStatus');
+  const calMsg = document.getElementById('calMsg');
+  let calTimer = null;
+
+  function renderCal(s) {
+    calMsg.textContent = '';
+    calMsg.className = '';
+    let html;
+    if (s.error) {
+      html = '<span style="color:#ff8fa3">' + s.error + '</span>';
+    } else if (s.active) {
+      const c = s.corner;
+      const target = c ? ' <b>' + c.label.replace('_', ' ').toUpperCase() +
+        '</b> corner at (' + c.pixel.join(', ') + ')' : '';
+      html = 'Corner ' + s.captured + '/' + s.total + target +
+        (s.armed ? ' — pinch with your index finger to capture.' : '');
+    } else if (s.saved_calibration_valid) {
+      html = 'Calibrated — homography is active. Repeat after moving the camera.';
+    } else {
+      html = 'No calibration yet. Gain/invert mapping is active.';
+    }
+    calStatus.innerHTML = html;
+  }
+
+  async function calPoll() {
+    try {
+      const res = await fetch('/api/calibration');
+      const s = await res.json();
+      renderCal(s);
+      calTimer = setTimeout(calPoll, 500);
+    } catch (e) {
+      calTimer = setTimeout(calPoll, 1000);
+    }
+  }
+
+  document.getElementById('calStart').onclick = async () => {
+    const res = await fetch('/api/calibration/start', {method: 'POST'});
+    const s = await res.json();
+    renderCal(s);
+    if (!calTimer) calTimer = setTimeout(calPoll, 500);
+  };
+  document.getElementById('calReset').onclick = async () => {
+    const res = await fetch('/api/calibration/reset', {method: 'POST'});
+    renderCal(await res.json());
+  };
+  document.getElementById('calClear').onclick = async () => {
+    const res = await fetch('/api/calibration/clear', {method: 'POST'});
+    renderCal(await res.json());
+  };
 })();
 </script>
 </body>

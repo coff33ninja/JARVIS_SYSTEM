@@ -70,11 +70,15 @@ Two phases of "spatial awareness" calibration, both stored per-profile
 (homography matrix, monitor rectangles, scale factors) and re-run after
 changing camera position or monitor layout:
 
-1. **Guided 4-corner calibration (primary):** the HUD shows a reticle on the
-   first of 4 screen corners; the user points at it and pinches to confirm.
-   The system records the index-tip position at each corner, then fits the
-   homography (DLT, 4 point correspondences) and saves it. Surfaced through
-   the calibration UI (8766) as a new "Auto-calibrate" flow.
+1. **Guided 4-corner calibration (primary):** the calibration UI (8766)
+   shows the current target corner; the user points an extended index finger
+   at it and pinches. While a session is armed, a pinch edge records the
+   normalized index tip instead of clicking (`ControlPipeline.arm_calibration`,
+   `app/calibrate/session.py`). After the 4th corner the homography is fit
+   (DLT, 4 point correspondences), applied live to the mapper, and saved.
+   Degenerate fits (duplicate/collinear corners) reset all captures so the
+   user restarts with 4 distinct points. The corner reticle on the transparent
+   HUD overlay is deferred — the calibrate page renders the target for now.
 2. **Passive refinement (optional, off by default):** while the user moves the
    cursor with gestures, the system accumulates (hand position → cursor
    target) pairs and periodically fits a RANSAC-refined homography, replacing

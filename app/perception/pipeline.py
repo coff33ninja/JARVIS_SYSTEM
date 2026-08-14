@@ -155,6 +155,10 @@ class ControlPipeline:
         self._mod_count_frames = 0
         self._mod_count_fired = False
         self._menu_dirty = False
+        # Guided 4-corner calibration (app/calibrate/session.py): while armed,
+        # a pinch edge records the index tip instead of clicking.
+        self._calibration_armed = False
+        self._calibration_capture = None
 
     # Actions the registry can gate inside _dispatch (ADR-011). "attention"
     # (circle) and "mode.transfer_toggle" (spread) dispatch outside _dispatch,
@@ -222,6 +226,24 @@ class ControlPipeline:
             ]),
             MenuCategory("gestures", "Gestures", items=gesture_items),
         ])
+
+    # ------------------------------------------------------------------ #
+    # guided calibration (app/calibrate/session.py)
+    # ------------------------------------------------------------------ #
+
+    def arm_calibration(self, capture) -> None:
+        """Arm pinch-driven capture: the next pinch edge calls ``capture``.
+
+        While armed, a pinch in Control mode records the normalized index tip
+        via ``capture(nx, ny)`` instead of emitting a click. ``disarm``
+        restores normal click behavior.
+        """
+        self._calibration_armed = True
+        self._calibration_capture = capture
+
+    def disarm_calibration(self) -> None:
+        self._calibration_armed = False
+        self._calibration_capture = None
 
     # ------------------------------------------------------------------ #
     # main loop
@@ -783,7 +805,12 @@ class ControlPipeline:
             sx, sy = self._move_cursor(pose.index_xy, actions)
             self._swipe(sx, actions)
         elif action_id == "click.left":
-            actions.extend(self._pinch(pose.index_xy))
+            if self._calibration_armed and self._calibration_capture is not None:
+                if not self._prev_pinch:  # edge: one capture per pinch
+                    self._calibration_capture(*pose.index_xy)
+                    self._prev_pinch = True
+            else:
+                actions.extend(self._pinch(pose.index_xy))
         elif action_id == "click.right":
             actions.extend(self._two_finger_pinch(pose.index_xy))
         elif action_id == "drag.toggle":

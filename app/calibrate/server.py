@@ -9,6 +9,12 @@ Endpoints:
     GET  /api/config    -> current AppConfig as JSON
     POST /api/config    -> merge validated values, apply live, save YAML
     GET  /api/monitors  -> detected per-monitor layout + virtual desktop
+    GET  /api/spatial   -> spatial-awareness status (calibration presence, ...)
+    GET  /api/calibration        -> guided 4-corner calibration session state
+    POST /api/calibration/start  -> begin a fresh 4-corner session (arms pinch)
+    POST /api/calibration/capture -> record a corner {nx, ny}
+    POST /api/calibration/reset  -> discard the in-progress session
+    POST /api/calibration/clear  -> drop the saved homography, use gain/invert
     GET  /              -> the calibration form (hud/calibrate.html)
 
 ``live_pipeline`` is optional. When present, control changes are applied
@@ -28,6 +34,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..config import AppConfig, CONFIG_FILE, update_config
+from .session import CalibrationController
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +57,8 @@ class CalibrationServer:
         self.pipeline = live_pipeline
         self._cfg = server_config or CalibrationConfig()
         self._save_path = Path(save_path) if save_path else CONFIG_FILE
+        self._controller = CalibrationController(config, live_pipeline,
+                                                 self._save_path)
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
@@ -67,7 +76,7 @@ class CalibrationServer:
         def _serve() -> None:
             try:
                 handler = _make_handler(self.config, self.pipeline,
-                                        self._save_path)
+                                        self._save_path, self._controller)
                 self._httpd = ThreadingHTTPServer(
                     (self._cfg.host, self._cfg.port), handler)
                 self._ready.set()
@@ -99,9 +108,12 @@ class CalibrationServer:
 
 
 def _make_handler(config: AppConfig, pipeline: Optional[object],
-                  save_path: Path):
+                  save_path: Path, controller=None):
     """Build a request handler bound to this server's config + pipeline."""
     import urllib.parse
+
+    controller = controller or CalibrationController(config, pipeline,
+                                                     save_path)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # quiet the default stderr spam
@@ -145,6 +157,8 @@ def _make_handler(config: AppConfig, pipeline: Optional[object],
                 })
             elif path == "/api/spatial":
                 self._send_json(200, _spatial_status(config, pipeline))
+            elif path == "/api/calibration":
+                self._send_json(200, controller.status())
             elif path in ("/", "/calibrate"):
                 body = _read_page()
                 self._send_html(body)
@@ -153,16 +167,35 @@ def _make_handler(config: AppConfig, pipeline: Optional[object],
 
         def do_POST(self) -> None:
             path = urllib.parse.urlparse(self.path).path
-            if path != "/api/config":
-                self._send_json(404, {"error": "not found"})
+            if path == "/api/config":
+                payload = self._read_json_body()
+                restart_required = apply_config_update(config, pipeline, payload)
+                config.save(save_path)
+                self._send_json(200, {
+                    "config": config.to_dict(),
+                    "restart_required": restart_required,
+                })
                 return
-            payload = self._read_json_body()
-            restart_required = apply_config_update(config, pipeline, payload)
-            config.save(save_path)
-            self._send_json(200, {
-                "config": config.to_dict(),
-                "restart_required": restart_required,
-            })
+            if path in ("/api/calibration/start", "/api/calibration/reset",
+                        "/api/calibration/clear"):
+                if path.endswith("/start"):
+                    result = controller.start()
+                elif path.endswith("/reset"):
+                    result = controller.reset()
+                else:
+                    result = controller.clear()
+                self._send_json(409 if result.get("error") else 200, result)
+                return
+            if path == "/api/calibration/capture":
+                body = self._read_json_body()
+                nx, ny = body.get("nx"), body.get("ny")
+                if not isinstance(nx, (int, float)) or not isinstance(ny, (int, float)):
+                    self._send_json(400, {"error": "nx and ny (numbers) are required"})
+                    return
+                result = controller.capture(float(nx), float(ny))
+                self._send_json(409 if result.get("error") else 200, result)
+                return
+            self._send_json(404, {"error": "not found"})
 
     return Handler
 

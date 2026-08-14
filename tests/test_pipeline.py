@@ -143,6 +143,29 @@ def test_pinch_clicks_once_on_edge():
     assert len([c for c in mouse.calls if c[0] == "click"]) == 1
 
 
+def test_calibration_arm_captures_pinch_without_clicking():
+    captured = []
+    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()))
+    pipe.arm_calibration(lambda nx, ny: captured.append((nx, ny)))
+    for _ in range(2):  # hold_frames debounce then fire
+        pipe.step(FRAME)
+    assert len(captured) == 1  # one capture per pinch edge
+    assert not [c for c in mouse.calls if c[0] == "click"]
+    # holding the pinch does not double-capture
+    pipe.step(FRAME)
+    assert len(captured) == 1
+
+
+def test_calibration_disarm_restores_click():
+    pipe, mouse, hud, _ = make_pipeline(hands(pinch_hand()))
+    pipe.arm_calibration(lambda nx, ny: None)
+    pipe.disarm_calibration()
+    for _ in range(2):  # hold_frames debounce then fire
+        pipe.step(FRAME)
+    clicks = [c for c in mouse.calls if c[0] == "click"]
+    assert len(clicks) == 1
+
+
 def test_two_finger_pinch_right_clicks():
     pipe, mouse, hud, _ = make_pipeline(hands(two_pinch_hand()))
     for _ in range(2):
