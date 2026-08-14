@@ -1,5 +1,5 @@
 perception:
-  camera_index: 0
+  camera_index: 1
   width: 1600
   height: 900
   fps: 60
@@ -10,7 +10,7 @@ perception:
 control:
   gain_x: 3.2
   gain_y: 3.2
-  invert_x: true
+  invert_x: false
   invert_y: false
   min_cutoff: 1.0
   beta: 0.007
@@ -26,11 +26,23 @@ control:
   preferred_hand: Right
   two_hand_spread_threshold: 0.4
   two_hand_zoom_threshold: 0.05
+  circle_min_samples: 8
+  circle_max_samples: 30
+  circle_min_sweep: 4.5
+  circle_max_aspect: 0.6
+  circle_endpoint_tol: 0.4
+  circle_cooldown_ms: 1500
   failsafe: false
   screen_x: null
   screen_y: null
   screen_w: null
   screen_h: null
+  calibration: null
+  active_monitor: null
+  zone_hold_ms: 300
+  menu_hold_ms: 250
+  menu_timeout_ms: 5000
+  passive_calibrate: false
 hud:
   host: 127.0.0.1
   port: 8765
