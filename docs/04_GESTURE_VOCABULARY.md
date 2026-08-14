@@ -22,6 +22,9 @@ Reference spec for gesture → action mapping. Hand landmarks use MediaPipe's 21
 | Catch (open palm) | Open palm, facing up | Accept incoming content | Transfer |
 | Circle / index trace | Index draws circle | Voice command / attention ("Jarvis") | Any |
 | Point at zone | Index toward a screen region | Select monitor / window target | Control, Transfer |
+| Finger count (secondary) | Secondary hand shows N extended fingers | Select monitor N (1–5); N = number of extended fingers | Control |
+| Fist (secondary, held) | Secondary hand in fist, held ≥ `menu_hold_ms` | Open HUD modifier menu (modes / screens / zoom / tune) | Control, Transfer, Chat, Presentation |
+| Open palm (secondary, in menu) | Secondary hand open palm while menu open | Cancel / close menu | Control |
 
 ## Mode System
 
@@ -50,11 +53,69 @@ Mode switch triggers: specific gesture (e.g., two-hand pinch apart), voice comma
 | F9 | Media volume down |
 | F10 | Media volume up |
 
+The **Circle / index-trace** gesture (the "Jarvis" attention call) is
+implemented as a trajectory detector in `app/perception/pipeline.py::_circle`
+backed by `app/perception/geometry.py::is_circle_trace`. While the pointing
+index is extended (not pinching, not an open palm), the recent index-tip
+positions are accumulated; when the trace closes into a circular sweep
+(min samples, angular sweep, bounding-box aspect, and start/end closure are
+all configurable under `control.circle_*`), an `attention` action fires once
+with a cooldown (`control.circle_cooldown_ms`). It works in any mode, and
+`ControlPipeline(on_attention=...)` exposes the hook for the agent/voice layer
+to respond (main.py logs it today).
+
 Swipe (in Control) fires `Alt+Tab` (swipe right) / `Alt+Shift+Tab` (swipe left) via a configurable threshold (`control.swipe_threshold_px`, default 250 px of accumulated screen motion).
 
 Two-hand spread toggles Control ↔ Transfer (`control.two_hand_spread_threshold`, default 0.4 normalized palm-center distance; held for `control.hold_frames`). While both hands are tracked, the cursor follows the configured preferred hand (`control.preferred_hand`, default "Right"). Open palm acts in Transfer (`catch`) and Chat (`release`), both edge-triggered.
 
 Two-hand pinch-apart zoom: while both hands pinch, palm-center distance changes fire `Ctrl++` (apart) / `Ctrl+-` (together) — one tick per `control.two_hand_zoom_threshold` (default 0.05) of accumulated distance change, active in Control and Transfer. Releasing either pinch (or losing a hand) re-arms the reference so the next pinch starts from a fresh distance.
+
+## Modifier Hand (Phase 2 spatial awareness)
+
+Design grounded in interaction research — see `16_INTERACTION_RESEARCH.md`
+(bi-manual fist+point is the canonical mid-air gesture, pie menus cap at
+≤8 items / 2 layers, screen-anchored menus beat hand-attached ones, and
+user-defined gestures measure better — the case for ADR-011).
+
+The **secondary hand** (the non-`preferred_hand`) acts as a modifier for
+multi-monitor targeting, with three levels that never collide with
+single-hand gestures (primary-hand fist = drag and primary-hand V-sign =
+scroll are untouched):
+
+1. **Passive zone** — when the secondary hand shows no deliberate gesture, its
+   lateral position in the frame selects the active monitor (far left → left
+   screen, etc.). The primary hand's cursor then maps *relative to that
+   monitor's rect* instead of the whole virtual desktop.
+2. **Finger count** — the secondary hand showing 1–5 extended fingers selects
+   monitor N directly (N = number of extended fingers, 5-monitor cap). This is
+   the fast path; monitors beyond 5 fall through to the fist menu.
+3. **Fist menu** — the secondary hand in a fist, held for
+   `control.menu_hold_ms` (~250 ms), opens a radial menu on the HUD with
+   categories **Modes** (Control / Chat / Transfer / Presentation / Idle),
+   **Screens** (per-monitor list + "all"), **Zoom** (in/out), **Tune**
+   (gain / invert quick sliders), and **Gestures** (dynamic bindings — toggle
+   any gesture level on/off, rebind a gesture to another action, tune
+   thresholds; see ADR-011). While the menu is open the primary hand
+   drives a highlight via the cursor/reticle, a pinch confirms the selection,
+   and an open palm cancels. The menu closes on fist release, selection, or
+   timeout (`control.menu_timeout_ms`). This is the "tune or select modes for
+   that scenario" surface, and pulls the *dual-hand / modifier* interaction
+   forward from Phase 6 into Phase 2.
+
+All three levels are gated on two hands being tracked and are suppressed by
+the two-hand rest-pose guard (a secondary open palm / spread frame stays a
+spread, never a monitor selection).
+
+### Collision defaults (decided; remappable in the Gestures menu)
+
+- **5-finger select vs. spread:** spread is defined as *both* hands open palm.
+  The finger-count level inspects only the secondary hand, so a lone
+  5-finger secondary hand while the primary points = monitor 5, while a
+  two-palm frame = Control↔Transfer toggle. No ambiguity.
+- **Passive zone anti-thrash:** the active monitor only changes after the
+  secondary hand holds the same zone for `control.zone_hold_ms` (~300 ms),
+  preventing monitor switching during ordinary two-hand movement. Disable or
+  retune in the Gestures menu.
 
 In Presentation mode (F3), V-sign and swipe navigate slides instead of scrolling / switching windows: an upward V-sign sweep or left swipe fires `PageUp` (previous slide); downward or right fires `PageDown` (next slide). Point still moves the cursor as a laser pointer.
 
@@ -67,7 +128,7 @@ Media hotkeys are dispatched through `MediaController` (`app/control/virtual_key
 - **Smoothing:** 1-Euro filter (recommended defaults: `minCutoff=1.0`, `beta=0.007`) to kill jitter without adding lag
 - **Debounce / hold times:** gestures that toggle (drag, grab, catch) require a hold window (~500 ms) to avoid accidental triggers; taps (pinch, V-sign) trigger on threshold crossing
 - **Confidence thresholds:** minimum landmark confidence ~0.5; only accept gesture labels above configured threshold
-- **Accidental-trigger guard:** require 2 consecutive frames at threshold before executing; ignore gestures if both hands detected in "rest" pose
+- **Accidental-trigger guard:** require 2 consecutive frames at threshold before executing (`control.hold_frames`); ignore gestures if both hands detected in "rest" pose — implemented in `ControlPipeline._rest_pose`, which suppresses the primary open palm (catch/release) while two open palms / a spread are up, since the two-hand spread handler owns that frame. Pinch and two-finger pinch also re-arm whenever the gesture changes, so a click never fires only once per hand-detection.
 
 ## Throw / Catch Semantics (Phase 4)
 

@@ -79,6 +79,14 @@ Architecture Decision Records. Each entry records a decision made during plannin
 - **Decision:** Thin `Agent` loop (`app/agent/agent.py`) over the chat API with a `ToolRegistry` of pure-Python functions exposing JSON-schema tool definitions. Memory is exposed as `recall` / `remember` tools, so long-term memory is used exactly like any other tool. Tool iteration is bounded (`max_tool_iterations`), and models that reject tool requests (HTTP 400, e.g. `smallthinker`) are retried once without tools so the agent degrades gracefully.
 - **Consequences:** We own iteration bounds, error handling, and tool safety. Per-model tool-calling quirks surface at the compatibility layer (`llm.py`), consistent with ADR-003.
 
+## ADR-011: Data-driven gesture bindings, editable live from the HUD menu
+
+- **Status:** Accepted (Phase 2)
+- **Context:** With the modifier-hand + fist-menu surface, the user wants the gesture setup to be "dynamic to a point": reassign gestures, toggle them on/off, and tune thresholds in-session rather than editing YAML or code. Today gesture→action dispatch is hardcoded in `ControlPipeline` (`app/perception/pipeline.py`), and each gesture needs code to add.
+- **Options:** (a) Keep hardcoded dispatch, menu only toggles existing levels — simplest, but every new gesture variation is a code change; (b) full rule engine / state machine with arbitrary gesture→action DSL — flexible but complex and hard to debug; (c) a data-driven registry: stable action IDs (e.g. `cursor.move`, `click.left`, `mode.chat`, `screen.monitor_3`) bound to gesture conditions, persisted in config, editable via the fist menu, with uniqueness enforcement.
+- **Decision:** (c). Introduce a gesture registry keyed by action ID; `ControlPipeline` dispatch resolves bindings from the registry instead of hardcoded branches. The fist menu's **Gestures** category edits bindings live (rebind, toggle, thresholds) with an in-menu collision warning when two conditions map to the same action or one condition is claimed twice.
+- **Consequences:** New gesture variations become config/bindings, not code. Requires refactoring the dispatch in `pipeline.py` to consult the registry, a config schema for bindings, and menu plumbing. Registry uniqueness is the invariant that keeps collisions (e.g. 5-finger select vs. spread) resolvable at runtime instead of baked in.
+
 ## Open Questions / Deferred Decisions
 
 - **Q-01:** Whether the tablet runs its own gesture detector or is a "ready to receive" peer only. Deferred to Phase 4.

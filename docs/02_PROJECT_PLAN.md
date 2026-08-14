@@ -19,7 +19,7 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 
 **Goal:** A usable, low-latency control layer that doesn't fight the user.
 
-- [ ] Full gesture set (see gesture vocabulary doc)
+- [x] Full gesture set (circle / index-trace attention added in `app/perception/pipeline.py::_circle`; grab/throw/catch are Phase 4)
 - [x] Thumbs up/down: confirm / reject in Chat
 - [x] Swipe (lateral point sweep): Alt+Tab next/prev window in Control
 - [x] On-screen virtual keyboard toggle (F4 -> Windows osk.exe)
@@ -33,7 +33,15 @@ Roadmap for the JARVIS-style multi-device gesture + LLM system. Each phase is a 
 - [x] Presentation mode (F3): point = laser cursor, V-sign/swipe = PageUp/PageDown slides
 - [x] Chat mode wiring (voice trigger) + calibration UI — voice→mode router (`app/control/mode_voice.py`) wired into `VoiceLoop.on_command`; end-to-end Idle→wake→Control→voice("chat mode")→Chat→voice→Control flow verified in `tests/test_chat_wiring.py`
 - [x] **Exit criterion (latency):** < 80 ms gesture→action latency — measured by `scripts/bench_latency.py` (`uv run python scripts/bench_latency.py --paced`); ~67 ms estimated / ~63 ms paced at defaults, leaving ~13 ms headroom; `tests/test_latency.py` guards it in CI
-- [ ] **Exit criterion (reliability):** zero misfires in a 10-minute session
+- [ ] **Spatial mapping (camera → screen zones):** replace fixed-gain cursor mapping with a fitted projective homography (camera frame ↔ virtual desktop, 4-point, DLT, stored in config); add `zone_for()` named regions (per-monitor, left/right/center/edge) and an "active monitor" target so the cursor maps relative to one monitor's rect. See 13_MULTIMONITOR.md.
+- [ ] **Auto-calibration ("spatial awareness"):** guided 4-corner pinch calibration (HUD reticle marks a corner, user pinches, system records index-tip) → fit + save homography; optional passive RANSAC refinement from observed hand→cursor pairs during normal use (off by default). Wired into the calibration UI (8766).
+- [ ] **Second-hand interaction (modifier hand):** three levels with no new detectors — (1) passive: secondary hand's lateral position selects the active monitor; (2) finger-count: 1–5 extended fingers on the secondary hand = monitor 1–5 (5-monitor cap); (3) fist-held radial menu on the HUD (Modes / Screens / Zoom / Tune) where the primary hand points to highlight, pinch confirms, open palm cancels. Gated on two-hand presence; never collides with primary-hand fist=drag or V-sign scroll. Guards: passive zone requires `zone_hold_ms` in the same zone before switching active monitor (anti-thrash); 5-finger select is distinct from spread because spread = *both* palms open, finger-count inspects only the secondary hand. Menu geometry and interaction choices grounded in `16_INTERACTION_RESEARCH.md` (pie ≤8 items / 2 layers, screen-anchored menu, fist-as-clutch). ADR-011.
+- [ ] **Dynamic gesture bindings (HUD menu "Gestures" category):** gesture→action mapping moves to a data-driven registry (stable action IDs ↔ gesture conditions), editable live from the fist menu — toggle any gesture level on/off, rebind a gesture to another action, tune thresholds. Registry enforces uniqueness (one action per pose/combination, with an in-menu warning on collisions). This is what makes the setup "dynamic to a point": new gesture variations are bindings, not code. ADR-011.
+- [ ] **Exit criterion (reliability):** zero misfires in a 10-minute session.
+  Guards in place to be verified live: pinch/two-finger-pinch re-arm on gesture
+  change (previously a pinch only fired once per hand-detection), rest-pose
+  suppression (two open palms no longer also fire catch/release on a spread
+  frame), plus the existing `hold_frames=2` debounce and lost-hand grace.
 
 **Head start:** `oleg-putseiko/gesture-control` (plugin architecture), `Ns81000/Vision-Mouse` (offline exe, hotkey toggle).
 

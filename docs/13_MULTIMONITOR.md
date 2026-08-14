@@ -16,11 +16,37 @@ How hand position on the webcam maps to cursor coordinates across one or more mo
 2. **Camera plane → virtual screen:** apply a calibration homography (4-point calibration) that maps the webcam view to the *entire virtual desktop bounding box*. This is more robust than a simple linear scale because camera placement varies.
 3. **Virtual screen → physical monitor:** Windows handles the virtual→physical split; we only need to know which monitor the point lands on (for zone detection and cursor clamping).
 
+> **Current implementation (Phase 1):** `CursorMapper.to_screen`
+> (`app/perception/mapping.py`) uses a fixed anchor + gain mapping around the
+> frame center (`control.gain_x` / `gain_y`, `invert_x` / `invert_y`) with no
+> homography. **Phase 2 plan:** replace this with a fitted projective
+> homography (4-point, DLT, 3×3 matrix stored in `MappingConfig.calibration`)
+> so camera placement/angle is compensated. `to_screen` then applies the
+> homography instead of the gain formula; the gain/invert knobs remain as a
+> fallback until a calibration exists.
+
 ## Zone & direction detection
 
-- Compute the virtual-screen point and classify it into zones: per-monitor rectangles (from `EnumDisplayMonitors`), plus named regions ("left screen", "right screen", "edge").
+- Compute the virtual-screen point and classify it into zones: per-monitor rectangles (from `EnumDisplayMonitors`), plus named regions ("left screen", "right screen", "edge"). Add `zone_for(nx, ny)` returning a named zone for HUD rendering and Phase 4 throw direction.
+- **Active monitor:** `MappingConfig.active_monitor` (int or `None` = whole virtual desktop). When set, `to_screen` maps into that monitor's rect (re-centered) instead of the union — this is the target for second-hand screen switching.
 - Throw-direction (Phase 4): derive a velocity vector in camera space, project it onto the virtual desktop, and let it decay past the nearest zone border → target device/zone.
 - "Point at a screen": pointing ray from hand position toward screen plane → intersect with monitor rectangles.
+
+## Second-hand screen switching (modifier hand)
+
+While two hands are tracked, the secondary (non-`preferred_hand`) hand
+selects the active monitor with three levels (see 04_GESTURE_VOCABULARY.md):
+
+1. **Passive zone** — secondary hand's lateral position picks the monitor,
+   gated by `control.zone_hold_ms` (~300 ms) in the same zone to prevent
+   thrash during ordinary two-hand movement (tunable/disableable in the
+   Gestures menu).
+2. **Finger count** — 1–5 extended fingers = monitor 1–5 (5-monitor cap; monitors beyond 5 via the fist menu).
+3. **Fist menu** — secondary fist held ≥ `menu_hold_ms` opens a HUD radial menu (Modes / Screens / Zoom / Tune); primary hand points, pinch confirms, open palm cancels.
+
+Selecting a monitor sets `active_monitor`, and the primary cursor re-centers on
+that monitor's rect. A spread frame is always owned by the spread handler
+(never treated as a monitor selection).
 
 ## Mixed-DPI handling (critical)
 
@@ -31,9 +57,21 @@ How hand position on the webcam maps to cursor coordinates across one or more mo
 
 ## Calibration (per user setup)
 
-1. Point at each monitor corner in turn (or use a 4-point grid) → record homography.
-2. Store per-profile: homography matrix, monitor rectangles, scale factors.
-3. Re-run after changing camera position or monitor layout.
+Two phases of "spatial awareness" calibration, both stored per-profile
+(homography matrix, monitor rectangles, scale factors) and re-run after
+changing camera position or monitor layout:
+
+1. **Guided 4-corner calibration (primary):** the HUD shows a reticle on the
+   first of 4 screen corners; the user points at it and pinches to confirm.
+   The system records the index-tip position at each corner, then fits the
+   homography (DLT, 4 point correspondences) and saves it. Surfaced through
+   the calibration UI (8766) as a new "Auto-calibrate" flow.
+2. **Passive refinement (optional, off by default):** while the user moves the
+   cursor with gestures, the system accumulates (hand position → cursor
+   target) pairs and periodically fits a RANSAC-refined homography, replacing
+   the guided one only when the reprojection error is clearly better. Guards:
+   only in Control mode, minimum samples before fitting, and a
+   `control.passive_calibrate` enable flag.
 
 ## HUD placement
 
